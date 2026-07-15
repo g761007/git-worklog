@@ -235,8 +235,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--history", help="Path to collect_git_history JSON, or '-' / omit for stdin.")
     p.add_argument("--worktree", help="Path to inspect_worktree JSON (today only).")
     p.add_argument("--include-uncommitted", action="store_true")
-    p.add_argument("--provider", default="claude_code",
-                   help="Subagent provider key (claude_code / codex / gemini).")
+    p.add_argument("--provider", default="anthropic",
+                   help="Subagent provider key (anthropic / openai / google).")
     p.add_argument("--model", default="", help="Runtime model id for the provider.")
     return p
 

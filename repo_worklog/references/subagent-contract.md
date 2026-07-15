@@ -87,7 +87,7 @@ Fields:
 | `date` | `"YYYY-MM-DD"` | The single day this manifest covers. |
 | `timezone` | string | Resolved IANA timezone. |
 | `include_uncommitted` | bool | Whether working-tree changes are in scope (today only). |
-| `provider` | string | `claude_code` / `codex` / `gemini`. |
+| `provider` | string | `anthropic` / `openai` / `google`. |
 | `model` | string | Runtime model id for that provider (section 4). |
 | `has_changes` | bool | True if there are commits or in-scope uncommitted changes. |
 | `commit_count` | int | Number of commits on the day. |
@@ -111,9 +111,9 @@ host it is running under:
 
 | Host | `provider` | `model` |
 |------|-----------|---------|
-| Claude Code | `claude_code` | `claude-sonnet-5` |
-| Codex | `codex` | `gpt-5.6-terra` (5.6 Terra) |
-| Gemini | `gemini` | `gemini-flash-3.0` (Flash 3.0) |
+| Claude Code | `anthropic` | `claude-sonnet-5` |
+| Codex | `openai` | `gpt-5.6-terra` (5.6 Terra) |
+| Gemini | `google` | `gemini-3-flash-preview` (Gemini 3 Flash) |
 
 A Day Subagent runs on, and spawns any Code Analysis Subagents on, the same
 provider/model it was given.
@@ -256,7 +256,7 @@ INPUTS
 - timezone:           [IANA tz, e.g. Asia/Taipei]
 - repository root:    [absolute path]
 - include_uncommitted:[true|false]   (uncommitted content belongs to TODAY only)
-- provider / model:   [claude_code|codex|gemini] / [claude-sonnet-5|gpt-5.6-terra|gemini-flash-3.0]
+- provider / model:   [anthropic|openai|google] / [claude-sonnet-5|gpt-5.6-terra|gemini-3-flash-preview]
 - analysis manifest (from build_analysis_manifest.py):
 [PASTE THE MANIFEST JSON HERE]
 

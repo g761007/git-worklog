@@ -30,13 +30,13 @@ The YAML shape (plan section 7.4, matching `agents/openai.yaml`):
 
 ```yaml
 providers:
-  claude_code:
+  anthropic:
     display_name: claude-sonnet-5
     model_id: <runtime-specific-model-id>
-  codex:
+  openai:
     display_name: gpt-5.6-terra
     model_id: <runtime-specific-model-id>
-  gemini:
+  google:
     display_name: gemini-3-flash-preview
     model_id: <runtime-specific-model-id>
 ```
