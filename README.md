@@ -118,11 +118,19 @@ python3 scripts/validate_worklog.py --target /tmp/WL.md
 
 ### Tests
 
-There is no packaged test suite yet. The scripts were verified against a
-controlled Git fixture (single/multi-commit days, revert, rename, binary,
-uncommitted changes) and an end-to-end run of the worklog engine (insert,
-overwrite, MANUAL preservation, corruption detection, preview consistency).
-See `docs/init_plan.md` section 27 for the intended acceptance-test matrix.
+A stdlib-only `unittest` suite lives in `tests/` (no third-party dependencies).
+Run it from the project root:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+It builds a controlled Git fixture (single/multi-commit days, revert, rename,
+binary, empty repo) and covers the date contract, Git collection, worktree
+inspection, the analysis manifest, the worklog engine (insert, overwrite, MANUAL
+preservation, corruption refusal), preview consistency, and the full
+deterministic pipeline. CI runs the same suite (see `.github/workflows/ci.yml`).
+`docs/init_plan.md` section 27 lists the broader acceptance-test matrix.
 
 ### Safety model
 
@@ -230,6 +238,17 @@ ln -s "$(pwd)/repo_worklog" ~/.claude/skills/repo_worklog
 - Apply 前以 preview 指紋（repo／branch／HEAD／worktree／工作日誌雜湊）把關；
   過期或已套用的 preview 會被拒絕。
 - Skill 絕不執行 `git add/commit/push/fetch/pull/checkout/switch/merge/rebase`。
+
+### 測試
+
+`tests/` 內含只用標準庫的 `unittest` 測試（零第三方相依），於專案根目錄執行：
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+涵蓋日期契約、Git 收集、工作區檢查、分析 manifest、worklog 引擎（插入／覆蓋／
+MANUAL 保留／損壞拒絕）、preview 一致性與完整確定性管線；CI 也會跑同一套。
 
 ### 授權
 
