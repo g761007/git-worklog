@@ -4,6 +4,48 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-16
+
+### Changed
+
+- **BREAKING:** default per-host subagent models are now cost-first for bounded,
+  per-day analysis — `anthropic` → Claude Haiku 4.5 (`claude-haiku-4-5`), `openai`
+  → GPT-5.6 Luna (`gpt-5.6-luna`, reasoning effort `low`), `google` → Gemini 3.5
+  Flash (`gemini-3.5-flash`). The previous defaults survive only as opt-in
+  escalation models.
+- **BREAKING:** subagent model selection has a single source of truth,
+  `config/provider_models.json`. `agents/openai.yaml` no longer carries a
+  `providers:` block — it points to the config via `model_config:`.
+- **BREAKING:** `build_analysis_manifest.py` takes `--model-json` (a structured
+  `{display_name, model_id[, reasoning_effort]}` object) instead of `--model`. The
+  manifest's `model` field is now that object (or `null`), and `reasoning_effort`
+  is omitted for providers that have none rather than emitted as an empty string.
+- The Day Subagent return schema gains `status`, `confidence`,
+  `escalation_recommended`, and `escalation_reasons`. These are advisory only and
+  never trigger an automatic model switch.
+- The dry-run summary now reports the resolved subagent configuration (provider,
+  model, model id, reasoning effort, automatic escalation: disabled).
+
+### Added
+
+- `resolve_provider_model.py` — resolve the per-host provider/model. The host is
+  never guessed; override precedence is `--model` > `REPO_WORKLOG_<PROVIDER>_MODEL`
+  > config default. An unresolvable model halts and asks with a candidate list — it
+  never silently falls back to a default or a pricier model.
+- Opt-in escalation configuration (`escalation_model_id` per provider,
+  `escalation_policy.automatic: false`). Escalation runs only after explicit user
+  approval and mints a new preview id; subagents never escalate on their own.
+- `tests/test_provider_models.py` — provider mapping, override precedence, manifest
+  threading, no-silent-fallback, and escalation coverage (suite grows 65 → 92).
+
+### Migrating from 0.2.0
+
+The ids in `config/provider_models.json` are public model names. If your host
+dispatches under a different id, override it with `REPO_WORKLOG_ANTHROPIC_MODEL` /
+`REPO_WORKLOG_OPENAI_MODEL` / `REPO_WORKLOG_GOOGLE_MODEL` (or an explicit
+`--model`) rather than editing multiple files. Anything that called
+`build_analysis_manifest.py --model <id>` must switch to `--model-json '<object>'`.
+
 ## [0.2.0] - 2026-07-16
 
 ### Changed
@@ -79,5 +121,6 @@ satisfied.
 - A stdlib-only `unittest` suite and GitHub Actions CI on Python 3.9 / 3.12 / 3.13,
   with a `skill.zip` release artifact.
 
+[0.3.0]: https://github.com/g761007/repo_worklog_skill/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/g761007/repo_worklog_skill/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/g761007/repo_worklog_skill/releases/tag/v0.1.0
