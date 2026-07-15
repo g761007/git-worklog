@@ -35,11 +35,11 @@ providers:
     display_name: claude-sonnet-5
     model_id: claude-sonnet-5           # replace with the host's exact id
   codex:
-    display_name: gpt-5.6 Terra
+    display_name: gpt-5.6-terra
     model_id: gpt-5.6-terra             # replace with the host's exact id
   gemini:
-    display_name: gemini-flash-3.0
-    model_id: gemini-flash-3.0          # replace with the host's exact id
+    display_name: gemini-3-flash-preview
+    model_id: gemini-3-flash-preview          # replace with the host's exact id
 
 # Behaviour on an unavailable model (plan section 7.5): never silently swap to a
 # pricier model, never auto-pick another, never degrade to commit-message-only.

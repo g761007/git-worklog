@@ -176,9 +176,9 @@ Model per host — pick the provider you are running under and pass its `model_i
 
 | Host        | display        | provider key   |
 |-------------|----------------|----------------|
-| Claude Code | claude-sonnet-5 | `claude_code` |
-| Codex       | gpt-5.6 Terra  | `codex`        |
-| Gemini      | gemini-flash-3.0 | `gemini`     |
+| Claude Code | claude-sonnet-5 | `anthropic` |
+| Codex       | gpt-5.6-terra  | `openai`        |
+| Gemini      | gemini-3-flash-preview | `google`     |
 
 If the chosen model is unavailable: **stop**, report it, list candidates, and
 let the user decide. Never silently fall back to a pricier model, never degrade

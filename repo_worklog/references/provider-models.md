@@ -12,9 +12,9 @@ model belonging to the host the skill is currently running under.
 
 | Host        | provider key  | display_name       | model_id                       |
 | ----------- | ------------- | ------------------ | ------------------------------ |
-| Claude Code | `claude_code` | `claude-sonnet-5`  | `<runtime-specific-model-id>`  |
-| Codex       | `codex`       | `gpt-5.6 Terra`    | `<runtime-specific-model-id>`  |
-| Gemini      | `gemini`      | `gemini-flash-3.0` | `<runtime-specific-model-id>`  |
+| Claude Code | `anthropic` | `claude-sonnet-5`  | `<runtime-specific-model-id>`  |
+| Codex       | `openai`       | `gpt-5.6-terra`    | `<runtime-specific-model-id>`  |
+| Gemini      | `google`      | `gemini-3-flash-preview` | `<runtime-specific-model-id>`  |
 
 ## display_name vs model_id
 
@@ -34,10 +34,10 @@ providers:
     display_name: claude-sonnet-5
     model_id: <runtime-specific-model-id>
   codex:
-    display_name: gpt-5.6 Terra
+    display_name: gpt-5.6-terra
     model_id: <runtime-specific-model-id>
   gemini:
-    display_name: gemini-flash-3.0
+    display_name: gemini-3-flash-preview
     model_id: <runtime-specific-model-id>
 ```
 
@@ -82,13 +82,13 @@ It MUST:
 Example message:
 
 ```text
-Model unavailable: gpt-5.6 Terra (codex) could not be selected on this host.
+Model unavailable: gpt-5.6-terra (openai) could not be selected on this host.
 
 I have not started the day-by-day analysis, and I will not auto-switch to
 another model. Currently selectable models:
 
-  - claude-sonnet-5 (claude_code)
-  - gemini-flash-3.0 (gemini)
+  - claude-sonnet-5 (anthropic)
+  - gemini-3-flash-preview (google)
 
 Reply with one of the above to substitute, or tell me how to proceed.
 ```
