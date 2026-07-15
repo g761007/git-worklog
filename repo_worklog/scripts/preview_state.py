@@ -3,10 +3,22 @@
 
 A preview records a fingerprint of everything that must not have changed between
 the dry-run and the apply: repository identity, branch, HEAD, working-tree
-fingerprint, the worklog's original content hash, the date parameters, timezone,
-include_uncommitted, and the preview content hash. ``apply`` is only safe when a
-re-check finds all of these identical, the preview has not already been applied,
-and it has not expired.
+fingerprint, timezone, include_uncommitted, and — because the worklog is now a
+directory, not one file — the index.md content hash, the per-date day-file
+hashes (each ``"missing"`` when absent), and a fingerprint of the directory's
+day-file listing. ``apply`` is only safe when a re-check finds all of these
+identical, the preview has not already been applied, and it has not expired.
+
+The ``worklog`` block passed to ``create`` / ``verify`` therefore looks like::
+
+    "worklog": {
+      "index_sha256": "<hash or 'missing'>",
+      "day_files": {"2026-07-15": "<hash>", "2026-07-14": "missing"},
+      "dir_fingerprint": "<hash of the sorted <date>.md listing>"
+    }
+
+A change to any target day file, to index.md, or to the set of day files (which
+would change the rebuilt index) invalidates the preview.
 
 State is stored outside the repository (``~/.repo_worklog/previews/``) so a
 dry-run never touches the working tree.
@@ -32,12 +44,16 @@ STATE_DIR = os.path.join(os.path.expanduser("~"), ".repo_worklog", "previews")
 DEFAULT_TTL_SECONDS = 24 * 3600
 
 # Fields compared between create-time and apply-time, with a stable label.
+# Values may be scalars or dicts (e.g. worklog.day_files); ``!=`` compares both.
 _CONSISTENCY_KEYS = [
     ("repository", "root", "repository"),
     ("repository", "branch", "branch"),
     ("repository", "head", "HEAD"),
     ("repository", "worktree_fingerprint", "working tree"),
-    ("worklog", "original_sha256", "worklog original content"),
+    ("worklog", "index_sha256", "index.md content"),
+    ("worklog", "day_files", "day files"),
+    ("worklog", "dir_fingerprint", "worklog directory listing"),
+    ("params", "timezone", "timezone"),
     ("params", "include_uncommitted", "include_uncommitted"),
 ]
 

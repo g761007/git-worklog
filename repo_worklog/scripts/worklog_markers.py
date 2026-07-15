@@ -1,53 +1,93 @@
 #!/usr/bin/env python3
-"""Shared parser / serialiser for the repo_worklog Markdown marker format.
+"""Shared parser / serialiser for the repo_worklog directory-based worklog.
 
-The worklog is a human-first Markdown document whose machine-updatable regions
-are delimited by stable HTML comments:
+The worklog is no longer a single growing file. It is a directory:
 
-    <!-- REPO_WORKLOG:ENTRIES:START -->
-    <!-- REPO_WORKLOG:2026-07-15:START -->
-    ## 2026-07-15
+    PROJECT_WORKLOG/
+    ├── index.md
+    ├── 2026-07-15.md
+    ├── 2026-07-14.md
+    └── ...
+
+Two on-disk shapes are managed here, each with stable HTML-comment markers that
+use the prefix ``REPO_WORKLOG``.
+
+**A per-day file** (``PROJECT_WORKLOG/<date>.md``) holds exactly one day. Its
+title and meta blockquote are tool-owned (regenerated on every write); only the
+MANUAL region is human-owned and preserved byte-for-byte::
+
+    # Project Worklog — 2026-07-15
+
+    > 時區：Asia/Taipei
+    > Branch：main
+    > HEAD：abc1234
+
     <!-- REPO_WORKLOG:2026-07-15:GENERATED:START -->
     ...auto-generated...
     <!-- REPO_WORKLOG:2026-07-15:GENERATED:END -->
+
     <!-- REPO_WORKLOG:2026-07-15:MANUAL:START -->
     ...human notes...
     <!-- REPO_WORKLOG:2026-07-15:MANUAL:END -->
-    <!-- REPO_WORKLOG:2026-07-15:END -->
-    <!-- REPO_WORKLOG:ENTRIES:END -->
 
-Only GENERATED regions are ever overwritten. MANUAL regions, the document
-header (before ENTRIES:START) and footer (after ENTRIES:END) are preserved
-verbatim. This module is deliberately conservative: when a date block is *not*
-being rewritten it is copied byte-for-byte, and even a rewritten block only has
-the text between its GENERATED markers replaced.
+**The index** (``PROJECT_WORKLOG/index.md``) is navigation only. Its GENERATED
+region is a date-descending table rebuilt from the day files; its MANUAL region
+is preserved verbatim::
 
-update_worklog.py, validate_worklog.py and preview_state.py all build on this
-module so the three agree on exactly one definition of the format.
+    <!-- REPO_WORKLOG:INDEX:GENERATED:START -->
+    | 日期 | 摘要 |
+    |---|---|
+    | [2026-07-15](./2026-07-15.md) | ... |
+    <!-- REPO_WORKLOG:INDEX:GENERATED:END -->
+
+    <!-- REPO_WORKLOG:INDEX:MANUAL:START -->
+    ...human notes...
+    <!-- REPO_WORKLOG:INDEX:MANUAL:END -->
+
+update_daily_worklog.py, rebuild_worklog_index.py, validate_daily_worklog.py,
+validate_worklog_index.py and preview_state.py all build on this module so they
+agree on exactly one definition of the format.
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 PREFIX = "REPO_WORKLOG"
-ENTRIES_START = f"<!-- {PREFIX}:ENTRIES:START -->"
-ENTRIES_END = f"<!-- {PREFIX}:ENTRIES:END -->"
+WORKLOG_DIRNAME = "PROJECT_WORKLOG"
+INDEX_FILENAME = "index.md"
 
-_ENTRIES_RE = re.compile(rf"^<!--\s*{PREFIX}:ENTRIES:(START|END)\s*-->$")
-_DATE_RE = re.compile(
-    rf"^<!--\s*{PREFIX}:(\d{{4}}-\d{{2}}-\d{{2}}):"
-    r"(START|END|GENERATED:START|GENERATED:END|MANUAL:START|MANUAL:END)\s*-->$"
+# --- regexes -----------------------------------------------------------------
+
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+DATE_FILE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.md$")
+
+_DAY_MARKER_RE = re.compile(
+    rf"^<!--\s*{PREFIX}:(\d{{4}}-\d{{2}}-\d{{2}}):(GENERATED|MANUAL):(START|END)\s*-->$"
 )
-_HEADING_RE = re.compile(r"^##\s+(\d{4}-\d{2}-\d{2})\s*$")
+_INDEX_MARKER_RE = re.compile(
+    rf"^<!--\s*{PREFIX}:INDEX:(GENERATED|MANUAL):(START|END)\s*-->$"
+)
+# Accept an em dash or a plain hyphen between the title and the date.
+_DAY_TITLE_RE = re.compile(r"^#\s+Project Worklog\s+[—–-]\s+(\d{4}-\d{2}-\d{2})\s*$")
+_SUMMARY_HEADING_RE = re.compile(r"^#{1,6}\s*當日摘要\s*$")
+_INDEX_ROW_RE = re.compile(r"^\|\s*\[(\d{4}-\d{2}-\d{2})\]\([^)]*\)\s*\|(.*)\|\s*$")
 
+# Fatal validation codes shared by both validators.
 FATAL_CODES = {
-    "ENTRIES_MISSING", "ENTRIES_UNBALANCED", "DATE_START_WITHOUT_END",
-    "DATE_END_WITHOUT_START", "DUPLICATE_DATE", "DUPLICATE_GENERATED",
-    "DUPLICATE_MANUAL", "MISSING_GENERATED", "MISSING_MANUAL",
-    "HEADING_MISMATCH", "INTERLEAVED_BLOCKS", "STRAY_MARKER",
+    "MISSING_GENERATED", "MISSING_MANUAL", "DUPLICATE_GENERATED",
+    "DUPLICATE_MANUAL", "GENERATED_UNCLOSED", "MANUAL_UNCLOSED",
+    "ORDER_MANUAL_BEFORE_GENERATED", "MARKER_DATE_MISMATCH",
+    "TITLE_MISSING", "TITLE_DATE_MISMATCH", "STRAY_DATE_MARKER",
+    "INDEX_MISSING_GENERATED", "INDEX_MISSING_MANUAL",
+    "INDEX_DUPLICATE_GENERATED", "INDEX_DUPLICATE_MANUAL",
+    "INDEX_GENERATED_UNCLOSED", "INDEX_MANUAL_UNCLOSED",
+    "INDEX_ORDER", "INDEX_DUPLICATE_DATE",
 }
+
+# Length cap for an index summary cell so the table stays skimmable.
+SUMMARY_MAX_CHARS = 80
 
 
 class WorklogFormatError(Exception):
@@ -56,285 +96,355 @@ class WorklogFormatError(Exception):
         super().__init__("; ".join(i["message"] for i in issues))
 
 
+# --- day-file model ----------------------------------------------------------
+
+
 @dataclass
-class Entry:
+class DayFile:
     date: str
-    block: str            # full verbatim block, DATE:START line .. DATE:END line
     generated: str        # inner text between GENERATED markers (verbatim)
     manual: str           # inner text between MANUAL markers (verbatim)
-    heading: str          # the "## DATE" heading line text (stripped)
+    title_date: str | None = None
+    trailing: str = ""    # any content after MANUAL:END (preserved on overwrite)
 
 
-@dataclass
-class WorklogDoc:
-    header: str = ""              # text before ENTRIES:START (verbatim)
-    footer: str = ""             # text after ENTRIES:END (verbatim)
-    entries: list[Entry] = field(default_factory=list)
-
-    def dates(self) -> list[str]:
-        return [e.date for e in self.entries]
-
-    def by_date(self) -> dict[str, Entry]:
-        return {e.date: e for e in self.entries}
+def is_valid_date(value: str) -> bool:
+    return bool(DATE_RE.match(value))
 
 
-def _classify(line: str):
-    s = line.strip()
-    m = _ENTRIES_RE.match(s)
-    if m:
-        return ("ENTRIES_" + m.group(1), None)
-    m = _DATE_RE.match(s)
-    if m:
-        return (m.group(2).replace(":", "_"), m.group(1))
-    return (None, None)
+def contains_marker_line(text: str) -> bool:
+    """True if any line is a REPO_WORKLOG day/index marker.
+
+    Generated content that carries such a line would corrupt the file's
+    structure (parsing is line-based), so callers reject it up front rather
+    than emit a file that fails to re-parse.
+    """
+    for line in text.splitlines():
+        s = line.strip()
+        if _DAY_MARKER_RE.match(s) or _INDEX_MARKER_RE.match(s):
+            return True
+    return False
 
 
-def scan(text: str) -> tuple[WorklogDoc | None, list[dict]]:
-    """Parse ``text`` and collect every structural issue.
+def parse_date_filename(name: str) -> str | None:
+    """Return the ISO date encoded by ``<date>.md`` or None (index/other names)."""
+    m = DATE_FILE_RE.match(name)
+    return m.group(1) if m else None
 
-    Returns ``(doc, issues)``. ``doc`` is ``None`` only when the ENTRIES region
-    itself cannot be located. Non-fatal issues (e.g. NOT_SORTED) may accompany a
-    usable ``doc``; callers decide what is tolerable.
+
+def scan_day(text: str, date: str) -> tuple[DayFile | None, list[dict]]:
+    """Parse a single day file, collecting every structural issue.
+
+    ``date`` is the date the file claims (its filename). Markers for any other
+    date are reported as ``MARKER_DATE_MISMATCH``. Returns ``(day, issues)``;
+    ``day`` is None when the GENERATED/MANUAL regions cannot be located.
     """
     issues: list[dict] = []
     lines = text.splitlines(keepends=True)
 
-    entries_start = entries_end = None
-    for idx, line in enumerate(lines):
-        kind, _ = _classify(line)
-        if kind == "ENTRIES_START":
-            if entries_start is not None:
-                issues.append({"code": "ENTRIES_UNBALANCED", "line": idx + 1,
-                               "message": "Duplicate ENTRIES:START marker."})
-            elif entries_end is not None:
-                issues.append({"code": "ENTRIES_UNBALANCED", "line": idx + 1,
-                               "message": "ENTRIES:START appears after ENTRIES:END."})
-            else:
-                entries_start = idx
-        elif kind == "ENTRIES_END":
-            if entries_end is not None:
-                issues.append({"code": "ENTRIES_UNBALANCED", "line": idx + 1,
-                               "message": "Duplicate ENTRIES:END marker."})
-            else:
-                entries_end = idx
+    title_date = None
+    gen_s = gen_e = man_s = man_e = None
+    dup_gen = dup_man = False
 
-    if entries_start is None or entries_end is None or entries_start > entries_end:
-        issues.append({"code": "ENTRIES_MISSING", "line": None,
-                       "message": "A single well-formed ENTRIES:START/END pair is required."})
+    for idx, raw in enumerate(lines):
+        s = raw.strip()
+        tm = _DAY_TITLE_RE.match(s)
+        if tm and title_date is None:
+            title_date = tm.group(1)
+            continue
+        m = _DAY_MARKER_RE.match(s)
+        if not m:
+            continue
+        mdate, region, edge = m.group(1), m.group(2), m.group(3)
+        if mdate != date:
+            issues.append({"code": "MARKER_DATE_MISMATCH", "line": idx + 1,
+                           "message": f"Marker date {mdate} does not match file date {date}."})
+            continue
+        if region == "GENERATED" and edge == "START":
+            if gen_s is not None:
+                dup_gen = True
+            else:
+                gen_s = idx
+        elif region == "GENERATED" and edge == "END":
+            if gen_e is not None:
+                dup_gen = True   # keep the first END; a second is a duplicate
+            else:
+                gen_e = idx
+        elif region == "MANUAL" and edge == "START":
+            if man_s is not None:
+                dup_man = True
+            else:
+                man_s = idx
+        elif region == "MANUAL" and edge == "END":
+            if man_e is not None:
+                dup_man = True
+            else:
+                man_e = idx
+
+    if title_date is None:
+        issues.append({"code": "TITLE_MISSING", "line": None,
+                       "message": "Missing '# Project Worklog — <date>' title line."})
+    elif title_date != date:
+        issues.append({"code": "TITLE_DATE_MISMATCH", "line": None,
+                       "message": f"Title date {title_date} does not match file date {date}."})
+
+    if dup_gen:
+        issues.append({"code": "DUPLICATE_GENERATED", "line": None,
+                       "message": f"Duplicate GENERATED region for {date}."})
+    if dup_man:
+        issues.append({"code": "DUPLICATE_MANUAL", "line": None,
+                       "message": f"Duplicate MANUAL region for {date}."})
+    if gen_s is None:
+        issues.append({"code": "MISSING_GENERATED", "line": None,
+                       "message": f"Missing GENERATED:START for {date}."})
+    if gen_s is not None and gen_e is None:
+        issues.append({"code": "GENERATED_UNCLOSED", "line": None,
+                       "message": f"GENERATED region for {date} is never closed."})
+    if man_s is None:
+        issues.append({"code": "MISSING_MANUAL", "line": None,
+                       "message": f"Missing MANUAL:START for {date}."})
+    if man_s is not None and man_e is None:
+        issues.append({"code": "MANUAL_UNCLOSED", "line": None,
+                       "message": f"MANUAL region for {date} is never closed."})
+    if (gen_s is not None and man_s is not None and man_s < gen_s):
+        issues.append({"code": "ORDER_MANUAL_BEFORE_GENERATED", "line": None,
+                       "message": f"MANUAL region precedes GENERATED region for {date}."})
+
+    if None in (gen_s, gen_e, man_s, man_e):
         return None, issues
 
-    header = "".join(lines[:entries_start])
-    footer = "".join(lines[entries_end + 1:])
-    region = lines[entries_start + 1:entries_end]
-    region_offset = entries_start + 1  # for human-facing line numbers
+    generated = "".join(lines[gen_s + 1:gen_e])
+    manual = "".join(lines[man_s + 1:man_e])
+    trailing = "".join(lines[man_e + 1:])
+    return DayFile(date, generated, manual, title_date, trailing), issues
 
-    doc = WorklogDoc(header=header, footer=footer)
-    seen_dates: set[str] = set()
 
-    state = "SEEK"          # SEEK, HEAD, GEN, POST_GEN, MAN, POST_MAN
-    cur_date = None
-    cur_start = None        # region-relative index of DATE:START
-    gen_start = gen_end = man_start = man_end = None
-    heading = None
-    saw_gen = saw_man = False
+def parse_day(text: str, date: str) -> DayFile:
+    """Parse a day file strictly: raise on any fatal structural issue."""
+    day, issues = scan_day(text, date)
+    fatal = [i for i in issues if i["code"] in FATAL_CODES]
+    if fatal or day is None:
+        raise WorklogFormatError(fatal or issues)
+    return day
 
-    def line_no(region_idx: int) -> int:
-        return region_offset + region_idx + 1
 
-    for ridx, line in enumerate(region):
-        kind, mdate = _classify(line)
+def _meta_block(timezone: str | None, branch: str | None, head: str | None) -> str:
+    meta: list[str] = []
+    if timezone:
+        meta.append(f"> 時區：{timezone}")
+    if branch:
+        meta.append(f"> Branch：{branch}")
+    if head:
+        meta.append(f"> HEAD：{head}")
+    return ("\n" + "\n".join(meta) + "\n") if meta else ""
 
-        if kind is None:
-            if state == "HEAD":
-                hm = _HEADING_RE.match(line.strip())
-                if hm and heading is None:
-                    heading = line.strip()
+
+def _assemble_day(date: str, generated_md: str, manual_inner: str, *,
+                  timezone: str | None, branch: str | None, head: str | None,
+                  trailing: str = "") -> str:
+    gen_body = generated_md.strip("\n")
+    parts = [
+        f"# Project Worklog — {date}\n",
+        _meta_block(timezone, branch, head),
+        "\n",
+        f"<!-- {PREFIX}:{date}:GENERATED:START -->\n",
+        (gen_body + "\n") if gen_body else "",
+        f"<!-- {PREFIX}:{date}:GENERATED:END -->\n",
+        "\n",
+        f"<!-- {PREFIX}:{date}:MANUAL:START -->\n",
+        manual_inner,
+        f"<!-- {PREFIX}:{date}:MANUAL:END -->\n",
+        trailing,
+    ]
+    return "".join(parts)
+
+
+def build_day_file(date: str, generated_md: str, manual_inner: str = "\n", *,
+                   timezone: str | None = None, branch: str | None = None,
+                   head: str | None = None) -> str:
+    """Build a day file with an explicit MANUAL inner block (used by migration)."""
+    inner = manual_inner or "\n"
+    if not inner.endswith("\n"):
+        inner += "\n"
+    return _assemble_day(date, generated_md, inner,
+                         timezone=timezone, branch=branch, head=head)
+
+
+def render_new_day_file(date: str, generated_md: str, *, timezone: str | None = None,
+                        branch: str | None = None, head: str | None = None) -> str:
+    """Build a brand-new day file with an empty MANUAL region."""
+    return _assemble_day(date, generated_md, "\n",
+                         timezone=timezone, branch=branch, head=head)
+
+
+def overwrite_day_generated(text: str, date: str, generated_md: str, *,
+                            timezone: str | None = None, branch: str | None = None,
+                            head: str | None = None) -> str:
+    """Return the day file with header + GENERATED refreshed, MANUAL preserved.
+
+    The MANUAL inner text is copied byte-for-byte from ``text``; the title and
+    meta blockquote are regenerated to reflect the current analysis run.
+    """
+    day = parse_day(text, date)
+    return _assemble_day(date, generated_md, day.manual,
+                         timezone=timezone, branch=branch, head=head,
+                         trailing=day.trailing)
+
+
+# --- index model -------------------------------------------------------------
+
+
+DEFAULT_INDEX_MANUAL = "可在此補充專案工作日誌的閱讀方式、重要里程碑或交接說明。\n"
+
+_INDEX_HEADER = (
+    "# Project Worklog\n\n"
+    "> 本目錄依據 Git commit、實際程式碼 diff 與相關程式碼上下文產生。\n"
+    "> 用於專案維護、交接與異動追蹤。\n"
+    "> 日期依執行環境的本地時區判定。\n\n"
+    "## 工作日誌\n\n"
+)
+
+
+@dataclass
+class IndexDoc:
+    rows: list[tuple[str, str]]   # (date, summary), order as found
+    manual: str                   # inner text between INDEX:MANUAL markers (verbatim)
+
+
+def summarise_generated(generated_md: str) -> str:
+    """Derive a one-line index summary from a day's 當日摘要 section.
+
+    Returns the first non-empty, non-heading line under the 當日摘要 heading,
+    collapsed to a single line, table-escaped, and length-capped. Empty string
+    when no summary paragraph is present.
+    """
+    lines = generated_md.splitlines()
+    in_summary = False
+    for raw in lines:
+        s = raw.strip()
+        if _SUMMARY_HEADING_RE.match(s):
+            in_summary = True
             continue
+        if not in_summary:
+            continue
+        if not s:
+            continue
+        if s.startswith("#"):
+            break  # next section began before any summary text
+        return clean_summary(s)
+    return ""
 
-        if kind == "START":
-            if state != "SEEK":
-                issues.append({"code": "INTERLEAVED_BLOCKS", "line": line_no(ridx),
-                               "message": f"{mdate}:START opened before the previous block closed."})
-                # Recover: treat as a fresh block start.
-            if mdate in seen_dates:
-                issues.append({"code": "DUPLICATE_DATE", "line": line_no(ridx),
-                               "message": f"Date {mdate} appears more than once."})
-            cur_date, cur_start = mdate, ridx
-            gen_start = gen_end = man_start = man_end = None
-            heading = None
-            saw_gen = saw_man = False
-            state = "HEAD"
 
-        elif kind == "GENERATED_START":
-            if state not in ("HEAD",):
-                issues.append({"code": "STRAY_MARKER", "line": line_no(ridx),
-                               "message": f"Unexpected GENERATED:START for {mdate}."})
-            if saw_gen:
-                issues.append({"code": "DUPLICATE_GENERATED", "line": line_no(ridx),
-                               "message": f"Duplicate GENERATED block for {mdate}."})
-            gen_start = ridx
-            saw_gen = True
-            state = "GEN"
+def clean_summary(text: str) -> str:
+    collapsed = re.sub(r"\s+", " ", text).strip()
+    collapsed = collapsed.replace("|", "\\|")
+    if len(collapsed) > SUMMARY_MAX_CHARS:
+        collapsed = collapsed[:SUMMARY_MAX_CHARS - 1].rstrip() + "…"
+    return collapsed
 
-        elif kind == "GENERATED_END":
-            gen_end = ridx
-            state = "POST_GEN"
 
-        elif kind == "MANUAL_START":
-            if state not in ("POST_GEN",):
-                issues.append({"code": "STRAY_MARKER", "line": line_no(ridx),
-                               "message": f"Unexpected MANUAL:START for {mdate}."})
-            if saw_man:
-                issues.append({"code": "DUPLICATE_MANUAL", "line": line_no(ridx),
-                               "message": f"Duplicate MANUAL block for {mdate}."})
-            man_start = ridx
-            saw_man = True
-            state = "MAN"
+def render_index(rows: list[tuple[str, str]], manual_inner: str | None = None) -> str:
+    """Render index.md from ``rows`` (caller sorts them date-descending)."""
+    if manual_inner is None:
+        manual_inner = DEFAULT_INDEX_MANUAL
+    table = ["| 日期 | 摘要 |", "|---|---|"]
+    for date, summary in rows:
+        table.append(f"| [{date}](./{date}.md) | {summary} |")
+    gen_body = "\n".join(table)
+    parts = [
+        _INDEX_HEADER,
+        f"<!-- {PREFIX}:INDEX:GENERATED:START -->\n",
+        gen_body + "\n",
+        f"<!-- {PREFIX}:INDEX:GENERATED:END -->\n",
+        "\n## 人工說明\n\n",
+        f"<!-- {PREFIX}:INDEX:MANUAL:START -->\n",
+        manual_inner,
+        f"<!-- {PREFIX}:INDEX:MANUAL:END -->\n",
+    ]
+    return "".join(parts)
 
-        elif kind == "MANUAL_END":
-            man_end = ridx
-            state = "POST_MAN"
 
-        elif kind == "END":
-            if cur_date is None:
-                issues.append({"code": "DATE_END_WITHOUT_START", "line": line_no(ridx),
-                               "message": f"{mdate}:END without a matching START."})
-                state = "SEEK"
-                continue
-            if mdate != cur_date:
-                issues.append({"code": "HEADING_MISMATCH", "line": line_no(ridx),
-                               "message": f"{mdate}:END does not match open block {cur_date}."})
-            if not saw_gen:
-                issues.append({"code": "MISSING_GENERATED", "line": line_no(ridx),
-                               "message": f"Block {cur_date} has no GENERATED region."})
-            if not saw_man:
-                issues.append({"code": "MISSING_MANUAL", "line": line_no(ridx),
-                               "message": f"Block {cur_date} has no MANUAL region."})
-            if heading is not None:
-                hm = _HEADING_RE.match(heading)
-                if hm and hm.group(1) != cur_date:
-                    issues.append({"code": "HEADING_MISMATCH", "line": line_no(ridx),
-                                   "message": f"Heading {heading!r} does not match block date {cur_date}."})
+def scan_index(text: str) -> tuple[IndexDoc | None, list[dict]]:
+    """Parse index.md, collecting every structural issue."""
+    issues: list[dict] = []
+    lines = text.splitlines(keepends=True)
 
-            block = "".join(region[cur_start:ridx + 1])
-            generated = ("".join(region[gen_start + 1:gen_end])
-                         if gen_start is not None and gen_end is not None else "")
-            manual = ("".join(region[man_start + 1:man_end])
-                      if man_start is not None and man_end is not None else "")
-            doc.entries.append(Entry(cur_date, block, generated, manual, heading or f"## {cur_date}"))
-            seen_dates.add(cur_date)
-            state = "SEEK"
-            cur_date = None
+    gen_s = gen_e = man_s = man_e = None
+    dup_gen = dup_man = False
+    for idx, raw in enumerate(lines):
+        m = _INDEX_MARKER_RE.match(raw.strip())
+        if not m:
+            continue
+        region, edge = m.group(1), m.group(2)
+        if region == "GENERATED" and edge == "START":
+            if gen_s is not None:
+                dup_gen = True
+            else:
+                gen_s = idx
+        elif region == "GENERATED" and edge == "END":
+            if gen_e is not None:
+                dup_gen = True   # keep the first END; a second is a duplicate
+            else:
+                gen_e = idx
+        elif region == "MANUAL" and edge == "START":
+            if man_s is not None:
+                dup_man = True
+            else:
+                man_s = idx
+        elif region == "MANUAL" and edge == "END":
+            if man_e is not None:
+                dup_man = True
+            else:
+                man_e = idx
 
-    if state != "SEEK":
-        issues.append({"code": "DATE_START_WITHOUT_END", "line": None,
-                       "message": f"Block {cur_date} was never closed with an END marker."})
+    if dup_gen:
+        issues.append({"code": "INDEX_DUPLICATE_GENERATED", "line": None,
+                       "message": "Duplicate INDEX GENERATED region."})
+    if dup_man:
+        issues.append({"code": "INDEX_DUPLICATE_MANUAL", "line": None,
+                       "message": "Duplicate INDEX MANUAL region."})
+    if gen_s is None:
+        issues.append({"code": "INDEX_MISSING_GENERATED", "line": None,
+                       "message": "Missing INDEX GENERATED:START."})
+    if gen_s is not None and gen_e is None:
+        issues.append({"code": "INDEX_GENERATED_UNCLOSED", "line": None,
+                       "message": "INDEX GENERATED region is never closed."})
+    if man_s is None:
+        issues.append({"code": "INDEX_MISSING_MANUAL", "line": None,
+                       "message": "Missing INDEX MANUAL:START."})
+    if man_s is not None and man_e is None:
+        issues.append({"code": "INDEX_MANUAL_UNCLOSED", "line": None,
+                       "message": "INDEX MANUAL region is never closed."})
 
-    # Non-fatal: descending order is what update enforces; validate reports drift.
-    ordered = doc.dates()
+    if None in (gen_s, gen_e, man_s, man_e):
+        return None, issues
+
+    generated = "".join(lines[gen_s + 1:gen_e])
+    manual = "".join(lines[man_s + 1:man_e])
+    rows: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for row_line in generated.splitlines():
+        rm = _INDEX_ROW_RE.match(row_line.strip())
+        if not rm:
+            continue
+        rdate, summary = rm.group(1), rm.group(2).strip()
+        if rdate in seen:
+            issues.append({"code": "INDEX_DUPLICATE_DATE", "line": None,
+                           "message": f"Date {rdate} appears more than once in the index."})
+        seen.add(rdate)
+        rows.append((rdate, summary))
+
+    ordered = [d for d, _ in rows]
     if ordered != sorted(ordered, reverse=True):
-        issues.append({"code": "NOT_SORTED", "line": None,
-                       "message": "Date blocks are not in descending order."})
+        issues.append({"code": "INDEX_ORDER", "line": None,
+                       "message": "Index dates are not in descending order."})
 
-    return doc, issues
+    return IndexDoc(rows, manual), issues
 
 
-def parse(text: str) -> WorklogDoc:
-    """Parse strictly: raise WorklogFormatError on any fatal structural issue."""
-    doc, issues = scan(text)
+def parse_index(text: str) -> IndexDoc:
+    doc, issues = scan_index(text)
     fatal = [i for i in issues if i["code"] in FATAL_CODES]
     if fatal or doc is None:
         raise WorklogFormatError(fatal or issues)
     return doc
-
-
-def _normalise_block(block: str) -> str:
-    stripped = block.strip("\n")
-    return stripped + "\n" if stripped else ""
-
-
-def render_generated_block(date: str, generated_md: str) -> str:
-    """Build a brand-new date block with empty MANUAL region."""
-    body = generated_md.strip("\n")
-    return (
-        f"<!-- {PREFIX}:{date}:START -->\n"
-        f"## {date}\n\n"
-        f"<!-- {PREFIX}:{date}:GENERATED:START -->\n"
-        f"{body}\n"
-        f"<!-- {PREFIX}:{date}:GENERATED:END -->\n\n"
-        f"<!-- {PREFIX}:{date}:MANUAL:START -->\n\n"
-        f"<!-- {PREFIX}:{date}:MANUAL:END -->\n\n"
-        f"<!-- {PREFIX}:{date}:END -->\n"
-    )
-
-
-def replace_generated(entry: Entry, generated_md: str) -> str:
-    """Return ``entry.block`` with only the GENERATED inner text replaced."""
-    lines = entry.block.splitlines(keepends=True)
-    gen_s = gen_e = None
-    for idx, line in enumerate(lines):
-        kind, _ = _classify(line)
-        if kind == "GENERATED_START":
-            gen_s = idx
-        elif kind == "GENERATED_END":
-            gen_e = idx
-            break
-    if gen_s is None or gen_e is None:
-        # Fall back to a full re-render preserving the manual text.
-        rebuilt = render_generated_block(entry.date, generated_md)
-        if entry.manual.strip():
-            return _inject_manual(rebuilt, entry.manual)
-        return rebuilt
-    body = generated_md.strip("\n")
-    head = "".join(lines[:gen_s + 1])
-    tail = "".join(lines[gen_e:])
-    return _normalise_block(head + body + "\n" + tail)
-
-
-def _inject_manual(block: str, manual: str) -> str:
-    lines = block.splitlines(keepends=True)
-    man_s = man_e = None
-    for idx, line in enumerate(lines):
-        kind, _ = _classify(line)
-        if kind == "MANUAL_START":
-            man_s = idx
-        elif kind == "MANUAL_END":
-            man_e = idx
-            break
-    if man_s is None or man_e is None:
-        return block
-    body = manual.strip("\n")
-    head = "".join(lines[:man_s + 1])
-    tail = "".join(lines[man_e:])
-    return _normalise_block(head + "\n" + body + "\n\n" + tail)
-
-
-DEFAULT_HEADER = (
-    "# Project Worklog\n\n"
-    "> 本文件依據 Git commit、實際程式碼 diff 與相關程式碼上下文產生。\n"
-    "> 用於專案維護、交接與異動追蹤。\n"
-    "> 日期依執行環境的本地時區判定。\n\n"
-)
-
-
-def new_document() -> WorklogDoc:
-    return WorklogDoc(header=DEFAULT_HEADER, footer="")
-
-
-def serialise(doc: WorklogDoc) -> str:
-    """Render a WorklogDoc back to Markdown, entries sorted date-descending."""
-    ordered = sorted(doc.entries, key=lambda e: e.date, reverse=True)
-    parts = [doc.header]
-    if not doc.header.endswith("\n\n") and doc.header:
-        parts.append("\n" if doc.header.endswith("\n") else "\n\n")
-    parts.append(ENTRIES_START + "\n\n")
-    blocks = [_normalise_block(e.block) for e in ordered]
-    parts.append("\n".join(blocks))
-    if blocks:
-        parts.append("\n")
-    parts.append(ENTRIES_END + "\n")
-    footer = doc.footer
-    if footer and not footer.startswith("\n"):
-        parts.append("\n")
-    parts.append(footer)
-    return "".join(parts)

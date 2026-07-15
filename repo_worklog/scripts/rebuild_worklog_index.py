@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""Rebuild PROJECT_WORKLOG/index.md from the per-day files.
+
+The index is navigation only: a date-descending table linking every
+``PROJECT_WORKLOG/<date>.md`` file, each row carrying that day's one-line
+summary (its 當日摘要). This script scans the directory for valid date files,
+derives each summary, rebuilds the GENERATED table, and preserves the index's
+MANUAL region byte-for-byte. Files that are not ``<date>.md`` (including
+``index.md`` itself) are ignored.
+
+Dry-run is the default. For a dry-run that reflects pending day-file writes not
+yet on disk, pass ``{"overrides": {"<date>": "summary", ...}}`` — an override
+supplies (or replaces) a date's summary and adds dates that will exist after the
+day-file apply. ``--apply`` writes index.md atomically.
+
+Input (``--input FILE`` or stdin, optional):
+    {"overrides": {"2026-07-15": "新增會員搜尋快取", ...}}
+
+Output is a single JSON object on stdout.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import sys
+import tempfile
+
+import worklog_markers as wm
+
+DEFAULT_DIR = wm.WORKLOG_DIRNAME
+
+
+def _emit(payload: dict) -> None:
+    json.dump(payload, sys.stdout, ensure_ascii=False, indent=2)
+    sys.stdout.write("\n")
+
+
+def _fail(code: str, message: str, **extra) -> None:
+    _emit({"ok": False, "errors": [{"code": code, "message": message, **extra}]})
+    sys.exit(2)
+
+
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _load_input(path: str | None) -> dict:
+    if path is None and sys.stdin.isatty():
+        return {}
+    raw = open(path, "r", encoding="utf-8").read() if path and path != "-" else sys.stdin.read()
+    if not raw.strip():
+        return {}
+    return json.loads(raw)
+
+
+def _scan_day_summaries(worklog_dir: str) -> tuple[dict[str, str], list[dict]]:
+    """Map each on-disk ``<date>.md`` to its summary; warn on unreadable files."""
+    summaries: dict[str, str] = {}
+    warnings: list[dict] = []
+    if not os.path.isdir(worklog_dir):
+        return summaries, warnings
+    for name in os.listdir(worklog_dir):
+        date = wm.parse_date_filename(name)
+        if date is None:
+            continue
+        path = os.path.join(worklog_dir, name)
+        try:
+            with open(path, "rb") as fh:
+                text = fh.read().decode("utf-8")
+            day = wm.parse_day(text, date)
+            summaries[date] = wm.summarise_generated(day.generated)
+        except (UnicodeDecodeError, wm.WorklogFormatError, OSError) as exc:
+            summaries[date] = ""
+            warnings.append({"code": "DAY_FILE_UNREADABLE", "date": date,
+                             "message": f"Could not read summary from {name}: {exc}"})
+    return summaries, warnings
+
+
+def _read_index_manual(index_path: str) -> str | None:
+    """Return the existing index MANUAL inner text, or None if index is absent.
+
+    Fail on a corrupt existing index rather than discard its MANUAL region.
+    """
+    if not os.path.exists(index_path):
+        return None
+    with open(index_path, "rb") as fh:
+        raw = fh.read()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        _fail("NON_UTF8", f"index.md is not valid UTF-8: {exc}", target=index_path)
+    try:
+        doc = wm.parse_index(text)
+    except wm.WorklogFormatError as exc:
+        _fail("INDEX_CORRUPT_MARKERS",
+              "index.md has corrupted/missing markers; refusing to guess a repair.",
+              target=index_path, issues=exc.issues)
+    return doc.manual
+
+
+def _atomic_write(target: str, content: str) -> None:
+    target_dir = os.path.dirname(os.path.abspath(target))
+    os.makedirs(target_dir, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=target_dir, prefix=".rw-index-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(content)
+            fh.flush()
+            os.fsync(fh.fileno())
+        with open(tmp, "r", encoding="utf-8") as fh:
+            wm.parse_index(fh.read())
+        os.replace(tmp, target)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
+def run(args: argparse.Namespace) -> int:
+    worklog_dir = args.dir or DEFAULT_DIR
+    index_path = os.path.join(worklog_dir, wm.INDEX_FILENAME)
+    payload = _load_input(args.input)
+    overrides = payload.get("overrides", {}) if isinstance(payload.get("overrides"), dict) else {}
+
+    summaries, warnings = _scan_day_summaries(worklog_dir)
+    # Overrides carry already-extracted one-line summaries (from
+    # update_daily_worklog.py's `summaries`), used to preview pending writes.
+    for date, summary in overrides.items():
+        if not wm.is_valid_date(date):
+            _fail("INVALID_DATE", f"Override key {date!r} is not a YYYY-MM-DD date.")
+        summaries[date] = wm.clean_summary(summary) if summary else ""
+
+    rows = [(d, summaries[d]) for d in sorted(summaries, reverse=True)]
+    existing_manual = _read_index_manual(index_path)
+    content = wm.render_index(rows, existing_manual)
+
+    original = None
+    if os.path.exists(index_path):
+        with open(index_path, "r", encoding="utf-8") as fh:
+            original = fh.read()
+    action = ("no_change" if original == content
+              else "create" if original is None else "rebuild")
+
+    common = {
+        "worklog_dir": worklog_dir,
+        "index_path": index_path,
+        "action": action,
+        "dates": [d for d, _ in rows],
+        "preserved_index_manual": existing_manual is not None,
+        "index_hash": {"original": _sha256(original) if original is not None else None,
+                       "preview": _sha256(content)},
+        "warnings": warnings,
+    }
+
+    if not args.apply:
+        _emit({"ok": True, "mode": "dry-run", **common, "preview": content,
+               "note": "No files have been modified."})
+        return 0
+
+    _atomic_write(index_path, content)
+    with open(index_path, "r", encoding="utf-8") as fh:
+        written = fh.read()
+    _emit({"ok": True, "mode": "apply", **common,
+           "written_sha256": _sha256(written),
+           "note": "index.md written atomically. No git add / commit / push was performed."})
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description="Rebuild PROJECT_WORKLOG/index.md from day files.")
+    p.add_argument("--input", help="Optional overrides JSON, or '-' for stdin.")
+    p.add_argument("--dir", help=f"Worklog directory (default: {DEFAULT_DIR}).")
+    p.add_argument("--apply", action="store_true",
+                   help="Write index.md. Without this flag the run is a dry-run.")
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    try:
+        return run(args)
+    except (json.JSONDecodeError, OSError) as exc:
+        _fail("IO_ERROR", f"{exc}")
+    except Exception as exc:  # never let a traceback replace the single JSON object
+        _fail("UNEXPECTED_ERROR", f"{type(exc).__name__}: {exc}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
