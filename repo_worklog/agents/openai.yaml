@@ -10,7 +10,7 @@ display_name: Repository Worklog
 description: >-
   Analyze Git commits and source code by day, then preview and maintain a
   project worklog.
-version: 0.1.0
+version: 0.2.0
 
 # The skill body is the control layer; this manifest only carries metadata.
 entrypoint: SKILL.md
@@ -64,7 +64,8 @@ capabilities:
   reads_git_history: true
   reads_source_code: true
   writes_files:
-    - docs/PROJECT_WORKLOG.md
+    - PROJECT_WORKLOG/index.md
+    - PROJECT_WORKLOG/<date>.md
   never_runs:
     - git add
     - git commit
