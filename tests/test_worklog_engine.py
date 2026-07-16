@@ -462,6 +462,37 @@ class TestPreviewState(unittest.TestCase):
         self.assertTrue(d["consistent"])
         self.assertEqual(rc, 0)
 
+    def test_switching_language_after_the_dry_run_blocks_apply(self):
+        # §6.2.10: a user who confirmed a zh-TW preview and then asked for
+        # English is asking for a different worklog. Apply must refuse and force
+        # a fresh preview rather than write prose nobody previewed.
+        pid = self._create()
+        state = {"repository": self.fp["repository"],
+                 "worklog": self.fp["worklog"],
+                 "params": {**self.fp["params"], "language": "en"}}
+        d, rc, _ = run_script("preview_state.py",
+                              ["verify", "--id", pid,
+                               "--now", "2026-07-15T12:05:00+08:00"],
+                              stdin=json.dumps(state), env=self.env)
+        self.assertFalse(d["consistent"])
+        self.assertEqual(rc, 3)
+        self.assertEqual([m["field"] for m in d["mismatches"]], ["language"])
+        self.assertEqual(d["reason"], "state changed since dry-run")
+
+    def test_same_language_applies_cleanly(self):
+        self.fp["params"]["language"] = "zh-TW"
+        pid = self._create()
+        state = {"repository": self.fp["repository"],
+                 "worklog": self.fp["worklog"],
+                 "params": {"timezone": "Asia/Taipei",
+                            "include_uncommitted": False, "language": "zh-TW"}}
+        d, rc, _ = run_script("preview_state.py",
+                              ["verify", "--id", pid,
+                               "--now", "2026-07-15T12:05:00+08:00"],
+                              stdin=json.dumps(state), env=self.env)
+        self.assertTrue(d["consistent"], d.get("mismatches"))
+        self.assertEqual(rc, 0)
+
     def test_changed_day_file_blocks(self):
         wl = {**self.fp["worklog"], "day_files": {"2026-07-15": "CHANGED", "2026-07-14": "missing"}}
         d, rc, _ = self._verify(wl)
