@@ -4,8 +4,9 @@
 Consumes the JSON produced by ``collect_git_history.py`` for a single day (and,
 optionally, ``inspect_worktree.py`` output for today) and groups the changed
 files by real work area using the documented priority order. It also proposes
-the context a subagent should read (full symbols, direct callers/deps, tests)
-and flags days large enough to warrant splitting into Code Analysis Subagents.
+the context a subagent should read (full symbols, direct callers/deps, tests),
+flags days large enough to warrant splitting into Code Analysis Subagents, and
+carries each commit's author plus the day's distinct author list.
 
 The manifest is a planning aid: it never summarises code and never decides the
 final worklog wording. Output is a single JSON object on stdout.
@@ -90,6 +91,21 @@ def classify(path: str) -> str:
             (".py", ".go", ".rb", ".java", ".rs", ".php", ".cs", ".ts", ".js", ".ex", ".exs")):
         return "backend"
     return "other"
+
+
+def _collect_authors(commits: list[dict]) -> list[str]:
+    """Distinct author names for the day, ordered by first appearance.
+
+    Deterministic fact, so it is computed here rather than inferred by a
+    subagent from the commit list -- a day with many commits is exactly where a
+    model would drop a contributor.
+    """
+    authors: list[str] = []
+    for commit in commits:
+        name = commit.get("author_name")
+        if name and name not in authors:
+            authors.append(name)
+    return authors
 
 
 def _top_module(path: str) -> str:
@@ -227,9 +243,11 @@ def build_manifest(args: argparse.Namespace) -> dict:
         "model": model,
         "has_changes": bool(commits) or bool(uncommitted),
         "commit_count": len(commits),
+        "authors": _collect_authors(commits),
         "commits": [{
             "short_hash": c.get("short_hash"),
             "full_hash": c.get("full_hash"),
+            "author_name": c.get("author_name"),
             "subject": c.get("subject"),
             "is_merge": c.get("is_merge"),
             "is_revert_candidate": c.get("is_revert_candidate"),
