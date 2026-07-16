@@ -111,6 +111,8 @@ wrapper heading, sections sit at `##` and work items at `###`:
 ```markdown
 ## 當日摘要
 
+參與者：Alice Chen、Bob Lin
+
 簡述當日完成的主要工作與整體影響。
 
 ## 主要異動
@@ -122,7 +124,7 @@ wrapper heading, sections sit at `##` and work items at `###`:
 - **實作方式：**
 - **影響範圍：**
 - **相關檔案：**
-- **相關 commits：**
+- **相關 commits：** abc1234 (Alice Chen) 新增快取層
 - **測試與驗證：**
 - **相容性與風險：**
 - **維護注意事項：**
@@ -154,10 +156,21 @@ wrapper heading, sections sit at `##` and work items at `###`:
 - **`當日摘要`** — one short paragraph on the day's main work and overall impact.
   Its **first line** is what `index.md` shows for the day, so lead with the
   single most useful sentence.
+- **`參與者`** — the day's distinct commit authors, `、`-separated, on its own
+  line directly under the `## 當日摘要` heading and **above** the summary
+  paragraph (so it never displaces the summary's first line, which the index
+  consumes). Take the list verbatim from the manifest's `authors[]`, which is
+  already deduplicated and ordered by first appearance — do not re-derive it by
+  reading the commit list, and do not reorder or translate the names. Omit the
+  line entirely when `authors[]` is empty.
 - **`主要異動`** — one `### 工作主題` sub-block per work item, each filling the ten
   bullet fields (`異動內容`, `程式碼行為`, `實作方式`, `影響範圍`, `相關檔案`,
   `相關 commits`, `測試與驗證`, `相容性與風險`, `維護注意事項`, `後續事項`). Repeat
   the block per distinct work item.
+- **`相關 commits`** — each entry is `<short_hash> (<author_name>) <subject>`.
+  Resolve `author_name` by looking the `short_hash` up in the manifest's
+  `commits[]`; never guess it from context. Author **names only** — the manifest
+  deliberately carries no emails.
 - The remaining sections carry fixes, refactors/tech-debt, database/migration,
   configuration/CI/deploy, test status, uncommitted working-tree changes (today
   only — see `code-analysis-rules.md`), and a fast-reading handoff guide.

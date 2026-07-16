@@ -170,8 +170,11 @@ model table below), then thread its `provider` and `model` into every day's
 manifest. `model` is an object — `{display_name, model_id}` plus
 `reasoning_effort` for openai only.
 
-Gives `file_groups` (grouped by real work area), `required_context`, and a
-`large_day` flag recommending Code Analysis Subagents when the day is big.
+Gives `file_groups` (grouped by real work area), `required_context`, a
+`large_day` flag recommending Code Analysis Subagents when the day is big, and
+the day's authorship — `authors[]` (distinct names, first-appearance order) plus
+`commits[].author_name`. You render the `參與者` line and each `相關 commits`
+entry's author from these directly; the subagent never returns attribution.
 
 **5c. Spawn one Day Subagent** for that day, passing the manifest. The subagent
 must read the real diffs and enough code context, determine the **end-of-day

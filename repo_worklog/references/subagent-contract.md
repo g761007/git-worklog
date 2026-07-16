@@ -92,7 +92,8 @@ Fields:
 | `model` | object\|null | `{display_name, model_id}` (+ `reasoning_effort` for openai). Section 4. |
 | `has_changes` | bool | True if there are commits or in-scope uncommitted changes. |
 | `commit_count` | int | Number of commits on the day. |
-| `commits[]` | array | `{short_hash, full_hash, subject, is_merge, is_revert_candidate}`. |
+| `authors[]` | array | The day's distinct commit author names, deduplicated, ordered by first appearance. |
+| `commits[]` | array | `{short_hash, full_hash, author_name, subject, is_merge, is_revert_candidate}`. |
 | `changed_files[]` | array | `{path, statuses, category, is_binary, is_submodule, old_path, commits}`. |
 | `file_groups[]` | array | `{group, category, module, files, commits, has_binary, has_submodule}`. |
 | `required_context[]` | array | `{group, category, read[], expand_second_layer_if, depth}`. |
@@ -102,6 +103,20 @@ Fields:
 
 `commits[].subject` is an **index and background only**. The subagent must still
 read each relevant patch and the surrounding code before drawing conclusions.
+
+**Authorship is rendered by the orchestrator, not returned by the subagent.**
+`authors[]` and `commits[].author_name` are deterministic facts the manifest
+already carries, so the orchestrator renders the `參與者` line from `authors[]`
+and resolves each `相關 commits` entry's author by `short_hash` lookup (see
+`references/worklog-format.md` §3). Routing them through the subagent's return
+schema would only add a step where a name can be dropped or misattributed, so
+the return schema (§6) carries no author field. A subagent may still *use*
+authorship as analysis context — e.g. noticing that one work theme was handed
+between two people — but it never decides the rendered attribution.
+
+Author **emails are deliberately absent** from the manifest. The worklog is
+human-facing prose; emails add PII noise and no narrative value. Do not fetch
+them separately.
 
 **Self-referential worklog commits are already excluded.** `collect_git_history.py`
 drops any commit whose changed files fall entirely inside the worklog output
