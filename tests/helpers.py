@@ -12,10 +12,14 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SCRIPTS = os.path.join(ROOT, "repo_worklog", "scripts")
+
+sys.path.insert(0, SCRIPTS)
+import worklog_markers as wm  # noqa: E402
 
 
 def run_script(name: str, args: list[str], stdin: str | None = None,
@@ -95,6 +99,41 @@ def make_history_repo() -> str:
     _git(repo, "mv", "src/calc.py", "src/math_utils.py")
     _write(repo, "assets/logo.png", b"\x00\x01\x02BINARY\xff\xfe", binary=True)
     _commit(repo, "2026-07-12T14:00:00+08:00", "refactor: rename calc, add logo")
+
+    return repo
+
+
+def make_worklog_commit_repo() -> str:
+    """Fixture mixing real work with self-referential worklog-output commits.
+
+    Timeline (committer/author dates, Asia/Taipei):
+      2026-07-20  feat: add greet.py                  (A src/greet.py)
+      2026-07-20  chore(docs): worklog day20           (A PROJECT_WORKLOG/*.md; worklog-only)
+      2026-07-21  chore(docs): worklog day21 only       (M PROJECT_WORKLOG/*.md; worklog-only, sole commit of the day)
+      2026-07-22  chore(docs): mixed worklog + fix      (M PROJECT_WORKLOG/index.md, M src/greet.py)
+    """
+    repo = tempfile.mkdtemp(prefix="rw_wlog_")
+    subprocess.run(["git", "init", "-q", "-b", "main", repo], check=True)
+    _git(repo, "config", "user.name", "Fixture Bot")
+    _git(repo, "config", "user.email", "fixture@example.com")
+    _git(repo, "config", "commit.gpgsign", "false")
+
+    day_file = f"{wm.WORKLOG_DIRNAME}/2026-07-20.md"
+    index_file = f"{wm.WORKLOG_DIRNAME}/{wm.INDEX_FILENAME}"
+
+    _write(repo, "src/greet.py", "def greet(name):\n    return f'hi {name}'\n")
+    _commit(repo, "2026-07-20T09:00:00+08:00", "feat: add greet.py")
+
+    _write(repo, day_file, "# Project Worklog — 2026-07-20\n")
+    _write(repo, index_file, "# Project Worklog\n")
+    _commit(repo, "2026-07-20T18:00:00+08:00", "chore(docs): worklog day20")
+
+    _write(repo, day_file, "# Project Worklog — 2026-07-20\n\nupdated\n")
+    _commit(repo, "2026-07-21T09:00:00+08:00", "chore(docs): worklog day21 only")
+
+    _write(repo, "src/greet.py", "def greet(name):\n    return f'hello {name}'\n")
+    _write(repo, index_file, "# Project Worklog\n\nupdated\n")
+    _commit(repo, "2026-07-22T09:00:00+08:00", "chore(docs): mixed worklog + fix")
 
     return repo
 

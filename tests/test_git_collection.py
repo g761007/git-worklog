@@ -7,11 +7,16 @@ import os
 import subprocess
 import unittest
 
-from helpers import make_empty_repo, make_history_repo, run_script, rmtree
+from helpers import (
+    make_empty_repo, make_history_repo, make_worklog_commit_repo, run_script, rmtree,
+)
 
 DAY_10 = ["--since", "2026-07-10T00:00:00+08:00", "--until", "2026-07-11T00:00:00+08:00"]
 DAY_12 = ["--since", "2026-07-12T00:00:00+08:00", "--until", "2026-07-13T00:00:00+08:00"]
 DAY_02 = ["--since", "2026-07-02T00:00:00+08:00", "--until", "2026-07-03T00:00:00+08:00"]
+DAY_20 = ["--since", "2026-07-20T00:00:00+08:00", "--until", "2026-07-21T00:00:00+08:00"]
+DAY_21 = ["--since", "2026-07-21T00:00:00+08:00", "--until", "2026-07-22T00:00:00+08:00"]
+DAY_22 = ["--since", "2026-07-22T00:00:00+08:00", "--until", "2026-07-23T00:00:00+08:00"]
 
 
 class TestCollectGitHistory(unittest.TestCase):
@@ -91,6 +96,51 @@ class TestCollectGitHistory(unittest.TestCase):
             self.assertEqual(d["commits"], [])
         finally:
             rmtree(repo)
+
+
+class TestWorklogSelfReferentialExclusion(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.repo = make_worklog_commit_repo()
+
+    @classmethod
+    def tearDownClass(cls):
+        rmtree(cls.repo)
+
+    def test_worklog_only_commit_excluded_on_mixed_day(self):
+        d, _, _ = run_script("collect_git_history.py", ["--repo", self.repo, *DAY_20])
+        self.assertEqual(d["commit_count"], 1)
+        self.assertEqual([c["subject"] for c in d["commits"]], ["feat: add greet.py"])
+
+    def test_day_with_only_worklog_commits_has_no_commits(self):
+        d, _, _ = run_script("collect_git_history.py", ["--repo", self.repo, *DAY_21])
+        self.assertTrue(d["ok"])
+        self.assertEqual(d["commit_count"], 0)
+        self.assertEqual(d["commits"], [])
+
+    def test_mixed_commit_keeps_only_real_files(self):
+        d, _, _ = run_script("collect_git_history.py", ["--repo", self.repo, *DAY_22])
+        self.assertEqual(d["commit_count"], 1)
+        files = [f["path"] for f in d["commits"][0]["files"]]
+        self.assertEqual(files, ["src/greet.py"])
+
+    def test_worklog_dir_override_disables_default_exclusion(self):
+        d, _, _ = run_script("collect_git_history.py",
+                             ["--repo", self.repo, "--worklog-dir", "SOME_OTHER_DIR", *DAY_21])
+        self.assertEqual(d["commit_count"], 1)
+        self.assertEqual(d["commits"][0]["subject"], "chore(docs): worklog day21 only")
+
+    def test_manifest_has_no_changes_for_worklog_only_day(self):
+        hist, _, _ = run_script("collect_git_history.py", ["--repo", self.repo, *DAY_21])
+        man, rc, err = run_script(
+            "build_analysis_manifest.py",
+            ["--date", "2026-07-21", "--timezone", "Asia/Taipei"],
+            stdin=json.dumps(hist),
+        )
+        self.assertTrue(man["ok"], err)
+        self.assertFalse(man["has_changes"])
+        self.assertEqual(man["commits"], [])
+        self.assertEqual(man["file_groups"], [])
 
 
 class TestInspectWorktree(unittest.TestCase):
