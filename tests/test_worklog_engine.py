@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -68,6 +69,22 @@ class TestMarkers(unittest.TestCase):
         gen = "## 當日摘要\n\n新增會員搜尋快取並補充 API 測試。\n\n## 主要異動\n"
         self.assertEqual(wm.summarise_generated(gen), "新增會員搜尋快取並補充 API 測試。")
         self.assertEqual(wm.summarise_generated("## 主要異動\n\nno summary section"), "")
+
+    def test_participants_line_below_summary_does_not_hijack_the_index(self):
+        # 參與者 must sit BELOW the summary paragraph. summarise_generated takes
+        # the first non-empty line under 當日摘要, so putting the participants
+        # line first makes every index row read "參與者：…" instead of what
+        # actually happened that day — which is exactly what shipped until an
+        # end-to-end run caught it.
+        gen = ("## 當日摘要\n\n新增會員搜尋快取並補充 API 測試。\n\n"
+               "參與者：Alice Chen、Bob Lin\n\n## 主要異動\n")
+        self.assertEqual(wm.summarise_generated(gen), "新增會員搜尋快取並補充 API 測試。")
+
+    def test_participants_line_above_summary_would_hijack_the_index(self):
+        # Pins the mechanism the rule exists for: this ordering is wrong, and
+        # this is precisely how it goes wrong.
+        gen = ("## 當日摘要\n\n參與者：Alice Chen\n\n新增會員搜尋快取。\n\n## 主要異動\n")
+        self.assertEqual(wm.summarise_generated(gen), "參與者：Alice Chen")
 
     def test_summary_escapes_pipe_and_caps_length(self):
         gen = "## 當日摘要\n\n" + "A|B " * 40
@@ -234,6 +251,37 @@ class TestRebuildIndex(unittest.TestCase):
 
     def tearDown(self):
         rmtree(self.work)
+
+    def test_apply_does_not_block_on_an_open_stdin_pipe(self):
+        # SKILL.md §8 runs `rebuild_worklog_index.py --apply` with no stdin
+        # redirect. Under an agent harness, CI, or cron, stdin is then neither a
+        # TTY nor closed, so an isatty()-only guard falls through to
+        # sys.stdin.read() and hangs forever. The rest of the suite passes
+        # stdin="" (closed immediately), which is exactly why it never caught
+        # this. Here stdin stays open, reproducing the real invocation.
+        proc = subprocess.Popen(
+            ["python3", os.path.join(SCRIPTS, "rebuild_worklog_index.py"),
+             "--dir", self.dir, "--apply"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True,
+        )
+        # Deliberately do NOT close proc.stdin and do NOT use communicate():
+        # both send EOF, which is what makes the rest of the suite pass while
+        # the real invocation hangs. Holding the write end open is the whole
+        # point of this test.
+        try:
+            proc.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+            self.fail("rebuild_worklog_index.py --apply blocked on an open stdin "
+                      "pipe instead of rebuilding from the day files")
+        out = proc.stdout.read()
+        proc.stdin.close()
+        proc.stdout.close()
+        proc.stderr.close()
+        self.assertEqual(proc.returncode, 0)
+        self.assertTrue(json.loads(out)["ok"])
 
     def test_builds_descending_with_summaries(self):
         d, _, _ = run_script("rebuild_worklog_index.py", ["--dir", self.dir, "--apply"], stdin="")

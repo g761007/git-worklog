@@ -47,7 +47,14 @@ def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _load_input(path: str | None) -> dict:
+def _load_input(path: str | None, apply_mode: bool = False) -> dict:
+    # In apply mode the day files are already on disk and the index is a pure
+    # function of them, so there is nothing to read. Reading stdin here would
+    # hang forever in any non-interactive environment -- an agent harness, CI,
+    # or cron -- where stdin is neither a TTY nor closed. isatty() alone is not
+    # a sufficient guard, and SKILL.md §8 documents `--apply` with no stdin.
+    if apply_mode and path is None:
+        return {}
     if path is None and sys.stdin.isatty():
         return {}
     raw = open(path, "r", encoding="utf-8").read() if path and path != "-" else sys.stdin.read()
@@ -121,7 +128,7 @@ def _atomic_write(target: str, content: str) -> None:
 def run(args: argparse.Namespace) -> int:
     worklog_dir = args.dir or DEFAULT_DIR
     index_path = os.path.join(worklog_dir, wm.INDEX_FILENAME)
-    payload = _load_input(args.input)
+    payload = _load_input(args.input, apply_mode=bool(args.apply))
     overrides = payload.get("overrides", {}) if isinstance(payload.get("overrides"), dict) else {}
 
     summaries, warnings = _scan_day_summaries(worklog_dir)

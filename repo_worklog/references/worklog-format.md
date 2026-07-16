@@ -111,9 +111,9 @@ wrapper heading, sections sit at `##` and work items at `###`:
 ```markdown
 ## 當日摘要
 
-參與者：Alice Chen、Bob Lin
-
 簡述當日完成的主要工作與整體影響。
+
+參與者：Alice Chen、Bob Lin
 
 ## 主要異動
 
@@ -157,12 +157,15 @@ wrapper heading, sections sit at `##` and work items at `###`:
   Its **first line** is what `index.md` shows for the day, so lead with the
   single most useful sentence.
 - **`參與者`** — the day's distinct commit authors, `、`-separated, on its own
-  line directly under the `## 當日摘要` heading and **above** the summary
-  paragraph (so it never displaces the summary's first line, which the index
-  consumes). Take the list verbatim from the manifest's `authors[]`, which is
-  already deduplicated and ordered by first appearance — do not re-derive it by
-  reading the commit list, and do not reorder or translate the names. Omit the
-  line entirely when `authors[]` is empty.
+  line **below** the summary paragraph. The placement is load-bearing:
+  `summarise_generated()` takes the **first** non-empty, non-heading line under
+  `## 當日摘要` as the day's `index.md` row, so a `參與者` line placed above the
+  paragraph becomes the index summary and every row reads "參與者：…" instead of
+  what happened that day. Keep it after the paragraph.
+  Take the list verbatim from the manifest's `authors[]`, which is already
+  deduplicated and ordered by first appearance — do not re-derive it by reading
+  the commit list, and do not reorder or translate the names. Omit the line
+  entirely when `authors[]` is empty.
 - **`主要異動`** — one `### 工作主題` sub-block per work item, each filling the ten
   bullet fields (`異動內容`, `程式碼行為`, `實作方式`, `影響範圍`, `相關檔案`,
   `相關 commits`, `測試與驗證`, `相容性與風險`, `維護注意事項`, `後續事項`). Repeat
