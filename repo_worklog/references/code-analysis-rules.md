@@ -178,6 +178,21 @@ the day, and must come from the day's tree.
 If the day's tree cannot answer something, that is an `uncertainties[]` entry and
 a lower `confidence` — not a licence to measure the checkout instead.
 
+### Prefer not to count at all
+
+The table above shows how to get a count honestly, but the better move is
+usually not to state one. A re-run under this rule stopped measuring the wrong
+repository and started **inventing numbers instead**: every per-file test count
+it reported was wrong (13/12/10/8 against an actual 12/18/13/1), and it labelled
+them `verified`. Closing one route to an unverified number simply opened another.
+
+So: a worklog reader needs to know **what a test protects**, not how many tests
+exist — and the first is provable from the diff while the second is exactly the
+kind of plausible-looking detail that gets invented. Describe coverage; omit the
+count. If a number is genuinely load-bearing, run the command, and cite the
+commit and file in `evidence[]` so a reader can re-run it. Never write a number
+you did not measure — being close is still fabrication.
+
 ---
 
 ## 6. Special situations

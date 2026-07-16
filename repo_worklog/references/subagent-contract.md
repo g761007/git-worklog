@@ -254,6 +254,19 @@ Rules:
   is attributed to today only.
 - Anything the subagent could not verify goes in `uncertainties[]`, not into a
   `work_item` phrased as fact.
+- **`tests[]` describes what the tests *cover*, not how many there are.** Each
+  entry names the test file and the behaviour it pins, e.g.
+  `"tests/test_git_collection.py — merge 偵測、revert 候選、rename/copy、二進位檔、空 repo"`.
+  Coverage is provable from the diff; a count is not, and a worklog reader needs
+  to know what is protected, not the size of the suite. **Do not emit a test
+  count** — no `count` field, no "N 個測試", no "(N test cases)".
+- **Never state a quantity you did not measure** (test counts, file counts, line
+  counts, percentages). This is the rule most likely to be broken, because a
+  plausible number is easy to produce and looks like analysis. If a number is
+  genuinely necessary, derive it from the day's tree with a command
+  (`git grep -c <pattern> <hash> -- <path>`, `git ls-tree -r <hash> | wc -l`) and
+  cite that commit and file in `evidence[]`. Otherwise omit it and describe the
+  thing instead. An unmeasured number is a fabrication even when it is close.
 
 ---
 
@@ -323,7 +336,12 @@ entry can be traced back to the analysis that produced it.
 
 Every `work_item` carries a `confidence`. Allowed values (plan §13.1):
 
-- `verified` — directly provable from the code, the diff, or the tests.
+- `verified` — directly provable from the code, the diff, or the tests **that you
+  actually read, at the day's commit**. If you did not open it, it is not
+  `verified`. A quantity you did not run a command to measure is never
+  `verified` — plausibility is not proof, and a number recalled rather than
+  counted has been observed to be wrong in every digit while carrying a
+  `verified` label.
 - `inferred` — a reasonable conclusion from context, with **no** direct proof.
 - `unknown` — insufficient data to decide.
 
@@ -471,11 +489,23 @@ OUTPUT
   change touches code. This is validated — a result whose evidence is prose, or
   is missing commit/file, is rejected and the day is marked failed. Evidence
   must come from the day's tree (step 2), never from the current checkout.
+- tests[] says what the tests COVER, not how many exist. Name the file and the
+  behaviour it pins:
+    "tests/test_git_collection.py — merge 偵測、revert 候選、rename/copy、空 repo"
+  Emit NO test count: no count field, no "N 個測試", no "(N test cases)".
+  Coverage is provable from the diff; a count is not.
+- NEVER state a quantity you did not measure — test counts, file counts, line
+  counts, percentages. A plausible number is easy to produce and looks like
+  analysis; every fabricated count in a real run was wrong. If a number is truly
+  needed, get it from the day's tree with a command
+  (git grep -c <pattern> <hash> -- <path>) and cite it in evidence[]. Otherwise
+  omit it and describe the thing instead.
 - Mark each work_item's confidence honestly: verified (provable from
-  code/diff/tests), inferred (reasonable, no direct proof), unknown (insufficient
-  data). Never state an inference as fact.
+  code/diff/tests you actually opened at the day's commit), inferred
+  (reasonable, no direct proof), unknown (insufficient data). Never state an
+  inference as fact. A number you did not measure is never verified.
 - Put anything unverifiable in uncertainties[]; lower confidence rather than
-  guess. Do NOT fabricate symbols, files, behaviours, or test results.
+  guess. Do NOT fabricate symbols, files, behaviours, counts, or test results.
 - Write the file, then reply with just: DONE
 ```
 
@@ -537,6 +567,9 @@ OUTPUT
     {"commit": "abc1234", "file": "src/cache.py", "symbol": "CacheLayer.get",
      "lines": "42-58", "note": "..."}
   commit and file are REQUIRED; symbol and lines are expected for code changes.
+- tests[] says what the tests COVER, not how many exist. Emit no test count.
+- NEVER state a quantity you did not measure with a command at the day's commit.
+  An unmeasured number is a fabrication even when it looks right.
 - Set confidence honestly (verified / inferred / unknown); never present an
   inference as fact. Record anything unverifiable as an uncertainty.
 - Do not deduplicate across other groups — the Day Subagent reconciles that.

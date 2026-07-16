@@ -4,6 +4,33 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Subagents no longer report counts; they report coverage.** `tests[]` now
+  names each test file and the behaviour it pins — never how many tests exist
+  (no `count` field, no "N 個測試"). More broadly: **never state a quantity you
+  did not measure**. If a number is load-bearing, derive it from the day's tree
+  with a command and cite it in `evidence[]`.
+- `verified` is tightened: it means provable from code/diff/tests **you actually
+  opened, at the day's commit**. A quantity you did not run a command to measure
+  is never `verified`.
+
+  Why: v0.4.0's §5a stopped subagents *measuring the wrong repository*, and a
+  re-run showed they simply started *inventing* instead — every per-file test
+  count was wrong (13/12/10/8 against an actual 12/18/13/1), all labelled
+  `verified`, with `uncertainties: []`. Closing one route to an unverified number
+  opened another, so the fix is to stop asking for the number: coverage is
+  provable from the diff, a count is not, and a worklog reader needs to know what
+  a test protects rather than how many there are. `tests[]` had never been
+  specified at all, which is how it filled with invented counts in the first
+  place.
+
+  Note this is **not enforced by `collect_day_results.py`** — schema validation
+  catches shape, not truth, and a fabricated number in a prose field is
+  well-formed. That is a known limit, not an oversight.
+
 ## [0.4.0] - 2026-07-16
 
 ### Added
