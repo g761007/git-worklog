@@ -9,8 +9,9 @@ name: repo_worklog
 display_name: Repository Worklog
 description: >-
   Analyze Git commits and source code by day, then preview and maintain a
-  project worklog.
-version: 0.3.1
+  project worklog — and report from it: period summaries, release CHANGELOGs,
+  handoff notes, and outstanding follow-ups.
+version: 0.4.0
 
 # The skill body is the control layer; this manifest only carries metadata.
 entrypoint: SKILL.md
@@ -19,14 +20,18 @@ command: /repo_worklog
 ui:
   category: developer-tools
   icon: 📓
-  summary: Per-day project worklog from real Git diffs and code.
+  summary: Per-day project worklog from real Git diffs and code, and reports from it.
   keywords:
     - worklog
     - work log
     - changelog
+    - release notes
     - git history
     - handoff
+    - weekly summary
     - 工作日誌
+    - 工作摘要
+    - 週報
 
 # Subagent model selection per host — SINGLE SOURCE OF TRUTH is the JSON below,
 # resolved by scripts/resolve_provider_model.py. Defaults prioritise cost
@@ -68,6 +73,14 @@ capabilities:
     - git switch
     - git merge
     - git rebase
+  # The 30-day cap bounds per-day subagent cost, so it governs worklog
+  # generation and gap backfill. Report mode only reads day files already on
+  # disk and spawns no subagents, so it reads further — a context bound, not a
+  # cost one. See references/report-mode.md.
   max_range_days: 30
+  max_report_range_days: 90
   default_include_uncommitted: false
-  always_dry_run_first: true
+  # Every write previews first and needs explicit confirmation. Report mode
+  # writes nothing, so it has no dry-run to confirm.
+  always_dry_run_before_write: true
+  read_only_report_mode: true

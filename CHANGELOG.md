@@ -4,6 +4,54 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-16
+
+### Added
+
+- **Report mode** — a read-only second mode that answers questions from the
+  existing worklog instead of building it: 「整理上一週工作摘要」, 「整理 v1.0.1
+  CHANGELOG」, handoff summaries, what a named person worked on, a feature's
+  history, or accumulated tech debt and follow-ups. The answer is returned in the
+  conversation; nothing is written, so there is no dry-run or confirmation gate.
+  Reports are synthesised from the day files, reusing their analysis rather than
+  re-deriving it. Specified in `references/report-mode.md`; `SKILL.md` §1a routes
+  between the two modes.
+- `resolve_ref_range.py` — resolve a tag/ref to its **authoritative commit set**
+  (`--tag` finds the previous tag automatically, `--from-ref`/`--to-ref` set an
+  explicit pair, `--list-tags` enumerates). A version is bounded by commits while
+  the worklog is indexed by date, and converting between them is lossy both ways,
+  so the commit set is the scope and the derived dates only locate the day files
+  worth reading.
+- `check_worklog_coverage.py` — classify each date as `covered` / `gap` /
+  `no-commits`. A date with no day file is only a gap if it had real commits; a
+  commitless day gets no file by design (`worklog-format.md` §6). When a report's
+  range contains gaps, the skill asks and recommends backfilling — it never
+  silently degrades to summarising commit messages.
+- `resolve_date_range.py` gains `--max-days` (default unchanged at 30) and echoes
+  the cap in effect as `max_days`.
+- Commit **authorship in the daily worklog**: a `參與者` line under `當日摘要` and
+  per-commit authors in `相關 commits`. The manifest now carries
+  `commits[].author_name` and a deduplicated day-level `authors[]`; the
+  orchestrator renders attribution from those directly, so the Day Subagent
+  return schema is unchanged. Author emails are deliberately excluded.
+- `tests/test_report_scope.py`, plus multi-author and tagged fixtures (suite
+  grows 97 → 132).
+
+### Changed
+
+- Two golden rules are now scoped per mode rather than weakened:
+  - The 30-day cap bounds per-day subagent cost, so it governs generation and
+    backfill. Report mode reads day files already on disk and spawns no
+    subagents, so it reads up to 90 days.
+  - The worklog still *stores* every author and never filters by
+    `git config user.name/email`. Report mode may filter by author **only** when
+    the user names the person explicitly — it never infers who "我" is.
+- `date-parameter-contract.md` now distinguishes 「上一週」 (the previous calendar
+  week, resolved to explicit `from`/`to`, never including today) from 「最近一週」
+  (a rolling `days=7` window that does).
+- `docs/init_plan.md` moved to `docs/plans/2026-07-15-repo-worklog-skill-design.md`;
+  design plans now live under `docs/plans/` as `yyyy-MM-dd-<topic>.md`.
+
 ## [0.3.1] - 2026-07-16
 
 ### Fixed
@@ -135,6 +183,7 @@ satisfied.
 - A stdlib-only `unittest` suite and GitHub Actions CI on Python 3.9 / 3.12 / 3.13,
   with a `skill.zip` release artifact.
 
+[0.4.0]: https://github.com/g761007/repo_worklog_skill/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/g761007/repo_worklog_skill/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/g761007/repo_worklog_skill/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/g761007/repo_worklog_skill/compare/v0.1.0...v0.2.0
