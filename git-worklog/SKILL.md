@@ -261,7 +261,7 @@ defaults; single source is `config/provider_models.json`):
 Pick the host you actually run under — never guess the provider from a model
 name, and never pass all three at once. If the host cannot be determined, stop
 and report a configuration error (`UNKNOWN_HOST`). Overrides: an explicit
-`--model` beats `REPO_WORKLOG_<PROVIDER>_MODEL`, which beats the config default.
+`--model` beats `GIT_WORKLOG_<PROVIDER>_MODEL`, which beats the config default.
 
 If the chosen model is unavailable: **stop**, report the provider and requested
 `model_id`, list candidates, and let the user decide. Never silently fall back to

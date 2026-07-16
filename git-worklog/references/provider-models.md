@@ -72,9 +72,24 @@ The skill never auto-substitutes an arbitrary host default beyond step 3.
 
 | provider    | environment variable            |
 | ----------- | ------------------------------- |
-| `anthropic` | `REPO_WORKLOG_ANTHROPIC_MODEL`  |
-| `openai`    | `REPO_WORKLOG_OPENAI_MODEL`     |
-| `google`    | `REPO_WORKLOG_GOOGLE_MODEL`     |
+| `anthropic` | `GIT_WORKLOG_ANTHROPIC_MODEL`  |
+| `openai`    | `GIT_WORKLOG_OPENAI_MODEL`     |
+| `google`    | `GIT_WORKLOG_GOOGLE_MODEL`     |
+
+The pre-v0.7 names — `REPO_WORKLOG_<PROVIDER>_MODEL` — shipped in v0.3.0–v0.4.0
+and are **still honoured**, because someone's shell profile still exports one and
+ignoring it would silently swap their model back to the config default: exactly
+the substitution this whole file exists to prevent. The current name wins when
+both are set, and a run that used a deprecated name reports it:
+
+```json
+"warnings": [{"code": "DEPRECATED_ENV_VAR",
+              "deprecated": "REPO_WORKLOG_OPENAI_MODEL",
+              "replacement": "GIT_WORKLOG_OPENAI_MODEL"}]
+```
+
+Surface that warning in the dry-run summary rather than swallowing it; the old
+names are removed in v2.0.
 
 ## Unavailable-model policy
 

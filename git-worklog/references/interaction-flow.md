@@ -303,7 +303,7 @@ when inconsistent. Consistency is checked across: repository root, branch, HEAD,
 working-tree fingerprint, `index.md` content, each target day file, the day-file
 listing, timezone, and `include_uncommitted` — so a changed target day file, a
 changed `index.md`, or an added/removed day file all invalidate the preview. The
-default TTL is 24 hours. Preview state lives in `~/.repo_worklog/previews/`,
+default TTL is 24 hours. Preview state lives in `~/.git-worklog/previews/`,
 outside the repo.
 
 If `consistent:false` (exit 3) — including `already_applied`, `expired`, or any

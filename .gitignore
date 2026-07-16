@@ -10,6 +10,8 @@ venv/
 
 # Build artifacts
 /skill.zip
+/build/
+/dist/
 
 # OS / editor
 .DS_Store

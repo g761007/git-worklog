@@ -24,6 +24,11 @@ git-worklog/                  # the skill (this whole directory is the skill)
 │   └── openai.yaml           # host manifest: display name, UI metadata, model_config pointer
 ├── config/
 │   └── provider_models.json  # single source of truth for per-host subagent models
+├── git_worklog/              # the engine + `git-worklog` CLI (stdlib only)
+│   ├── __init__.py           # __version__ — the single source of the product version
+│   ├── markers.py            # day/index parser/serialiser; the format's definition
+│   ├── paths.py              # user-level state dir ($GIT_WORKLOG_HOME, ~/.git-worklog)
+│   └── cli/                  # version / doctor / validate
 ├── scripts/                  # deterministic Python helpers (stdlib only)
 │   ├── resolve_provider_model.py    # resolve per-host provider/model (overrides, escalation, halt-and-ask)
 │   ├── resolve_date_range.py        # date/timezone parsing, day-span cap, per-day bounds
@@ -39,7 +44,7 @@ git-worklog/                  # the skill (this whole directory is the skill)
 │   ├── validate_worklog_index.py   # index marker/order/link/UTF-8 validation
 │   ├── preview_state.py            # multi-file preview fingerprint, apply-time consistency
 │   ├── migrate_legacy_worklog.py   # one-time split of the legacy single file
-│   └── worklog_markers.py          # shared day/index parser/serialiser
+│   └── worklog_markers.py          # compatibility shim -> git_worklog.markers
 └── references/               # detailed specs the skill loads on demand
     ├── report-mode.md
     ├── interaction-flow.md
@@ -97,6 +102,35 @@ ln -s "$(pwd)/git-worklog" ~/.claude/skills/git-worklog
 ```
 
 Then invoke it with `/git-worklog` (or natural language like “整理最近 7 天”).
+
+Nothing is installed and nothing is compiled: the engine sits inside that folder
+and runs on the standard library alone.
+
+### The CLI (optional)
+
+The same engine also ships a `git-worklog` command. **The skill does not need
+it** — it is for driving the deterministic parts yourself, from a terminal or
+from CI:
+
+```bash
+pip install .          # from a clone; puts `git-worklog` on PATH
+git-worklog version    # CLI / layout / config-schema versions
+git-worklog doctor     # is this environment able to run the tool?
+git-worklog validate   # is the worklog on disk well-formed?
+```
+
+Without installing, the same commands run straight from the skill folder:
+
+```bash
+PYTHONPATH=git-worklog python3 -m git_worklog doctor --text
+```
+
+Each prints one JSON object (`--text` for a human-readable rendering). Exit `0`
+means ok, `1` means it ran and found a problem, `2` means it could not run.
+
+More commands — generation, reports, migration — arrive as the CLI grows; today
+those live in the skill. The CLI never replaces the analysis itself: reading
+patches and deciding what changed is the agent's job, not a script's.
 
 ### Usage
 
@@ -161,11 +195,11 @@ the old file, and refuses if the legacy markers are corrupt.
 - **Subagent models:** defined once in `git-worklog/config/provider_models.json`
   (cost-first defaults — Claude Haiku 4.5 / GPT-5.6 Luna / Gemini 3.5 Flash) and
   resolved per host by `resolve_provider_model.py`. Override with
-  `REPO_WORKLOG_{ANTHROPIC,OPENAI,GOOGLE}_MODEL` or an explicit `--model`. See
+  `GIT_WORKLOG_{ANTHROPIC,OPENAI,GOOGLE}_MODEL` or an explicit `--model`. See
   `references/provider-models.md`.
-- **Preview state:** stored outside the repo in `~/.repo_worklog/previews/`.
+- **Preview state:** stored outside the repo in `~/.git-worklog/previews/`.
 - **Subagent results:** each Day Subagent writes its analysis to
-  `~/.repo_worklog/analysis/<run_id>/<date>.json` rather than returning it as
+  `~/.git-worklog/analysis/<run_id>/<date>.json` rather than returning it as
   reply text, which drops and truncates. Files are kept after the run, so a
   surprising worklog entry can be traced to the analysis behind it.
 
@@ -258,7 +292,12 @@ subagent 分析，所有變更都先以 dry-run 預覽，**經你明確確認後
     - `validate_worklog_index.py`：索引標記／排序／連結／UTF-8 驗證。
     - `preview_state.py`：多檔 preview 指紋、apply 前一致性、防重複套用。
     - `migrate_legacy_worklog.py`：一次性把舊單檔拆成目錄式。
-    - `worklog_markers.py`：共用的日期檔／索引解析／序列化模組。
+    - `worklog_markers.py`：相容轉接層，實際模組為 `git_worklog.markers`。
+  - `git_worklog/`：引擎與 `git-worklog` CLI 本體（僅標準庫）。
+    - `__init__.py`：`__version__`——產品版本的單一來源。
+    - `markers.py`：日期檔／索引的解析與序列化，即格式的定義。
+    - `paths.py`：使用者層級狀態目錄（`$GIT_WORKLOG_HOME`、`~/.git-worklog`）。
+    - `cli/`：`version`／`doctor`／`validate`。
   - `references/`：skill 依需求載入的詳細規格（報告模式、互動流程、日期契約、
     程式碼分析規則、subagent 契約、工作日誌格式、模型設定）。
 - `docs/naming-conventions.md`：品牌、skill、CLI、package 與目錄的正式命名對照。
@@ -304,6 +343,32 @@ ln -s "$(pwd)/git-worklog" ~/.claude/skills/git-worklog
 ```
 
 之後以 `/git-worklog` 或自然語言（例如「整理最近 7 天」）呼叫。
+
+不需要安裝任何東西，也不需要編譯：引擎就在那個資料夾裡，只用標準庫執行。
+
+### CLI（選用）
+
+同一套引擎另外提供 `git-worklog` 指令。**skill 不需要它**——它是給你在終端機或 CI
+裡自行驅動確定性部分用的：
+
+```bash
+pip install .          # 從 clone 安裝，把 `git-worklog` 放進 PATH
+git-worklog version    # CLI／佈局／設定 schema 版本
+git-worklog doctor     # 這個環境跑得動嗎？
+git-worklog validate   # 磁碟上的工作日誌格式正確嗎？
+```
+
+不安裝的話，同樣的指令可直接從 skill 資料夾執行：
+
+```bash
+PYTHONPATH=git-worklog python3 -m git_worklog doctor --text
+```
+
+每個指令輸出單一 JSON 物件（`--text` 可切成人類可讀格式）。離開碼 `0` 表示正常、
+`1` 表示執行成功但發現問題、`2` 表示指令本身無法執行。
+
+產生日誌、報告、遷移等指令會隨 CLI 成長陸續加入，目前仍在 skill 內。CLI 永遠不會
+取代分析本身：閱讀 patch、判斷程式行為改變是 agent 的工作，不是腳本的。
 
 ### 使用方式
 
@@ -361,11 +426,11 @@ skill 會明講並詢問是否先補齊——**絕不默默降級成摘要 commi
 - **Subagent 模型**：於 `git-worklog/config/provider_models.json` 統一設定
   （成本優先預設——Claude Haiku 4.5 ／ GPT-5.6 Luna ／ Gemini 3.5 Flash），由
   `resolve_provider_model.py` 依宿主解析；可用
-  `REPO_WORKLOG_{ANTHROPIC,OPENAI,GOOGLE}_MODEL` 或 `--model` 覆寫，詳見
+  `GIT_WORKLOG_{ANTHROPIC,OPENAI,GOOGLE}_MODEL` 或 `--model` 覆寫，詳見
   `references/provider-models.md`。
-- **Preview 狀態**：存放在 repo 之外的 `~/.repo_worklog/previews/`。
+- **Preview 狀態**：存放在 repo 之外的 `~/.git-worklog/previews/`。
 - **Subagent 分析結果**：每個 Day Subagent 把分析**寫進**
-  `~/.repo_worklog/analysis/<run_id>/<date>.json`，而不是用回傳值交付——回傳通道會掉內容也會截斷。
+  `~/.git-worklog/analysis/<run_id>/<date>.json`，而不是用回傳值交付——回傳通道會掉內容也會截斷。
   結果檔在執行後保留，方便回溯某段日誌是根據什麼分析寫出來的。
 
 ### 安全模型
