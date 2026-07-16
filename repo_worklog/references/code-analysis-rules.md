@@ -201,3 +201,17 @@ revision** and **new revision** (from `old_sha` / `new_sha`), whether the
 submodule content is **available** to you, and whether you actually **analyzed**
 it. If the submodule content is not available, **never guess** what changed
 inside it — say it was not analyzed and lower confidence accordingly.
+
+### 6.8 Self-referential worklog commits
+
+`collect_git_history.py` already drops commits that touch **only** the worklog
+output directory (`PROJECT_WORKLOG/` by default — the `WORKLOG_DIRNAME` constant
+in `worklog_markers.py`) before you ever see them: e.g. a
+`chore(docs): 補充 XX 專案工作日誌` commit that only edits day files and
+`index.md`. Such a commit never appears in `commits[]`, is never counted in
+`commit_count`, and cannot make a day `has_changes:true` on its own. A commit
+that touches the worklog directory **and** real files is kept, with only the
+worklog-directory files stripped from its `files[]`. You will therefore never be
+asked to summarise "today I wrote the worklog" — if a day's only commits were
+worklog output, the manifest reports `has_changes:false` and, per §6 of
+`references/worklog-format.md`, no file is created for it.

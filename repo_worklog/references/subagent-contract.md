@@ -103,6 +103,13 @@ Fields:
 `commits[].subject` is an **index and background only**. The subagent must still
 read each relevant patch and the surrounding code before drawing conclusions.
 
+**Self-referential worklog commits are already excluded.** `collect_git_history.py`
+drops any commit whose changed files fall entirely inside the worklog output
+directory (`PROJECT_WORKLOG/` by default) before the manifest is built — see
+`references/code-analysis-rules.md` §6.8. A day whose only commits were worklog
+output arrives with `commits: []`, `commit_count: 0`, and `has_changes: false`,
+same as a day with no commits at all.
+
 ---
 
 ## 4. Provider / model per host
