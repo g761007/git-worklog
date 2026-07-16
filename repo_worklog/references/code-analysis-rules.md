@@ -132,12 +132,51 @@ To determine the net state, compare:
 
 - the state **before the day's first commit**,
 - the **intermediate commits** in between,
-- the state **after the day's last commit**,
-- and, when needed to confirm what actually survived, the **current version of
-  that code in the repository**.
+- the state **after the day's last commit**.
 
 Describe what was introduced and what was later undone, and state clearly what
 the code does at day's end.
+
+---
+
+## 5a. Read the day's tree, not the checkout
+
+"End of day" means **the repository as it stood at that day's last commit**. The
+working tree in front of you is a different repository: it carries every change
+made since, which for a historical day can be weeks of work.
+
+This is the easiest rule in this document to break, because reading the checkout
+is the most convenient thing available. A real run broke it: a subagent analysing
+2026-07-15 ran the current test suite and recorded "Ran 132 tests" as that day's
+result. The suite had **44** tests that day. The number was real — it was just
+measuring the wrong repository.
+
+**Read at the commit, always:**
+
+| You want | Use | Never |
+| --- | --- | --- |
+| A commit's patch | `git show --format=fuller --find-renames --find-copies <hash>` | — |
+| A file as it was that day | `git show <hash>:<path>` | opening the file from the working tree |
+| What files existed that day | `git ls-tree -r <hash> --name-only -- <dir>` | `ls <dir>` |
+| A count that day (tests, files, symbols) | `git grep -c <pattern> <hash> -- <path>` | grepping the working tree |
+| Whether a symbol existed that day | `git grep -n <symbol> <hash> -- <path>` | grepping the working tree |
+
+Use the day's **last** commit as `<hash>` for end-of-day questions, and the
+specific commit for questions about that commit.
+
+**Never run the project.** Do not run the test suite, a build, a linter, or any
+command that executes the current checkout. They all measure today, and their
+output is not evidence about a past day. Read test files to see what they cover
+(§3); do not execute them. "The tests pass" is not a claim this analysis makes.
+
+**Consulting today is allowed for exactly one question:** *does this change still
+exist now?* That can be worth noting for a handoff. When you do, say so
+explicitly — "當日新增的快取層目前仍在（截至分析時）" — and never let today's
+state stand in for the day's. A statement without that marker is a claim about
+the day, and must come from the day's tree.
+
+If the day's tree cannot answer something, that is an `uncertainties[]` entry and
+a lower `confidence` — not a licence to measure the checkout instead.
 
 ---
 

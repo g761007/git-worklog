@@ -354,15 +354,43 @@ surface the suggestion in the dry-run and act on it after explicit user approval
 
 ## 8. Evidence
 
-`evidence` appears both at the top level and inside each `work_item`. Every
-important conclusion must cite, at minimum (plan §13.2):
+`evidence` appears both at the top level and inside each `work_item`. **Every
+entry is an object, not a sentence** — prose is not evidence, because prose
+cannot be checked:
 
-- the commit hash,
-- the file path,
-- the symbol / function name,
-- the relevant diff or code region,
-- the test file (when a test backs the claim),
-- line numbers or ranges where relevant.
+```json
+{
+  "commit": "abc1234",
+  "file": "src/cache.py",
+  "symbol": "CacheLayer.get",
+  "lines": "42-58",
+  "note": "新增快取查詢，miss 時回源"
+}
+```
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `commit` | **yes** | The commit hash this was observed in (short or full). |
+| `file` | **yes** | The path, as it exists in that commit's tree. |
+| `symbol` | no | Function / class / component. Omit when the change has no symbol (a config or doc file). |
+| `lines` | no | Line or range within that file, e.g. `"42-58"`. |
+| `note` | no | One short line on what this specific citation shows. |
+
+`commit` and `file` are mandatory because they are the two facts that are always
+knowable and always verifiable against the repository. `symbol` and `lines` are
+expected wherever the change touches code — omit them only when they genuinely do
+not apply, not to save effort.
+
+This is enforced, not merely requested: `collect_day_results.py read` rejects a
+result whose evidence entries are strings, or are missing `commit` or `file`
+(`EVIDENCE_INVALID`), and that day is reported as failed. The reason is that a
+free-text `evidence` field degrades into a restatement of the commit subject —
+observed in a real run: `"commit 4d08ee4: 完整改造，加 authors[] 與 author_name"`
+cites nothing a reader can open, and would satisfy any prose-based rule.
+
+Evidence must come from **the day's tree**, read at the commit — never from the
+current checkout, and never from running the project. See
+`references/code-analysis-rules.md` §5a.
 
 A conclusion with no evidence is not `verified`. If evidence cannot be gathered
 (unreadable file, missing submodule, permission error), lower the confidence and
@@ -401,19 +429,29 @@ WHAT TO DO
 1. For every relevant commit in the manifest, read the ACTUAL patch:
    git show --format=fuller --find-renames --find-copies <full_hash>
    Never conclude from the subject, body, file list, or diffstat alone.
-2. Follow references/code-analysis-rules.md: read the full enclosing
+2. READ THE DAY'S TREE, NOT THE CHECKOUT. The working tree holds every change
+   made since this date; it is a different repository. Read at the commit:
+     git show <hash>:<path>                     (a file as it was that day)
+     git ls-tree -r <hash> --name-only -- <dir> (what existed that day)
+     git grep -c <pattern> <hash> -- <path>     (any count, as of that day)
+   NEVER run the test suite, a build, or a linter — they measure today, and
+   their output is not evidence about this day. Read test files; do not execute
+   them. You may check today's state ONLY to answer "does this still exist
+   now?", and you must label any such statement as today's, not the day's.
+   Full rules: references/code-analysis-rules.md §5a.
+3. Follow references/code-analysis-rules.md: read the full enclosing
    function/class/component of each hunk, one layer of direct callers, one layer
    of direct dependencies, and the related tests. Expand a second layer when a
    public API, schema, or shared core is touched.
-3. Handle merge commits, revert candidates, and rename/copy correctly; do not
+4. Handle merge commits, revert candidates, and rename/copy correctly; do not
    double-count merges or read a rename as delete+add.
-4. Group commits by REAL work theme, not one-per-commit. If large_day is true,
+5. Group commits by REAL work theme, not one-per-commit. If large_day is true,
    you MAY fan out into Code Analysis Subagents grouped by work area (see the
    large-day template) — never one-commit-one-subagent.
-5. Determine the END-OF-DAY final state. If a change was introduced and then
-   reverted the same day, report the net result, not each intermediate step as
-   if it were live.
-6. If include_uncommitted is true, incorporate the manifest's
+6. Determine the END-OF-DAY final state — the repository as it stood at this
+   day's LAST commit. If a change was introduced and then reverted the same day,
+   report the net result, not each intermediate step as if it were live.
+7. If include_uncommitted is true, incorporate the manifest's
    uncommitted_changes as today's work.
 
 OUTPUT
@@ -425,9 +463,14 @@ OUTPUT
   (verified|inferred|unknown), and escalation_recommended + escalation_reasons[]
   honestly per section 7. escalation_recommended is a SUGGESTION only — never
   switch models yourself.
-- Every important conclusion cites evidence: commit hash, file path,
-  symbol/function, diff/code region, test file, and line numbers/ranges where
-  relevant.
+- Every important conclusion cites evidence, and every evidence entry is an
+  OBJECT, never a sentence:
+    {"commit": "abc1234", "file": "src/cache.py", "symbol": "CacheLayer.get",
+     "lines": "42-58", "note": "新增快取查詢，miss 時回源"}
+  commit and file are REQUIRED; symbol and lines are expected wherever the
+  change touches code. This is validated — a result whose evidence is prose, or
+  is missing commit/file, is rejected and the day is marked failed. Evidence
+  must come from the day's tree (step 2), never from the current checkout.
 - Mark each work_item's confidence honestly: verified (provable from
   code/diff/tests), inferred (reasonable, no direct proof), unknown (insufficient
   data). Never state an inference as fact.
@@ -474,19 +517,26 @@ INPUTS
 WHAT TO DO
 1. For each commit above, read the actual patch for THIS group's files
    (git show <hash> -- <paths>).
-2. Read the full enclosing function/class/component, one layer of direct
+2. READ THE DAY'S TREE, NOT THE CHECKOUT — it holds every change made since this
+   date. Use `git show <hash>:<path>`, `git ls-tree -r <hash>`, and
+   `git grep -c <pattern> <hash> -- <path>` rather than the working tree, and
+   never run the test suite, a build, or a linter (they measure today). See
+   references/code-analysis-rules.md §5a.
+3. Read the full enclosing function/class/component, one layer of direct
    callers, one layer of direct dependencies, and the related tests, per
    references/code-analysis-rules.md and the `depth` given. Expand a second
    layer when expand_second_layer_if applies.
-3. Determine the end-of-day state for THIS group's files, accounting for changes
+4. Determine the end-of-day state for THIS group's files, accounting for changes
    later undone within the same day.
 
 OUTPUT
 - Return work_item objects (section 6 schema) plus, where they apply,
   fixes / refactors / tests / database_changes / configuration_changes /
   deployment_changes entries for THIS group only.
-- Cite evidence for each conclusion: commit hash, file path, symbol/function,
-  diff/code region, test file, line numbers/ranges.
+- Every evidence entry is an OBJECT, never a sentence:
+    {"commit": "abc1234", "file": "src/cache.py", "symbol": "CacheLayer.get",
+     "lines": "42-58", "note": "..."}
+  commit and file are REQUIRED; symbol and lines are expected for code changes.
 - Set confidence honestly (verified / inferred / unknown); never present an
   inference as fact. Record anything unverifiable as an uncertainty.
 - Do not deduplicate across other groups — the Day Subagent reconciles that.

@@ -67,6 +67,13 @@ REQUIRED_WORK_ITEM_KEYS = [
 VALID_STATUS = {"complete", "partial", "failed"}
 VALID_CONFIDENCE = {"verified", "inferred", "unknown"}
 
+# Evidence entries are objects, not sentences (subagent-contract.md §8). commit
+# and file are required because they are the two facts always knowable and always
+# checkable against the repository. Left as free text, the field reliably decays
+# into a restatement of the commit subject -- observed in a real run:
+# "commit 4d08ee4: 完整改造" cites nothing a reader can open.
+REQUIRED_EVIDENCE_KEYS = ["commit", "file"]
+
 
 def _emit(payload: dict) -> None:
     json.dump(payload, sys.stdout, ensure_ascii=False, indent=2)
@@ -113,6 +120,36 @@ def cmd_init(args: argparse.Namespace) -> int:
     return 0
 
 
+def _validate_evidence(entries, where: str) -> list[dict]:
+    """Evidence must be checkable citations, not prose."""
+    if entries is None:
+        return []
+    if not isinstance(entries, list):
+        return [{"code": "EVIDENCE_INVALID",
+                 "message": f"{where} must be an array."}]
+    issues: list[dict] = []
+    for idx, e in enumerate(entries):
+        if not isinstance(e, dict):
+            issues.append({
+                "code": "EVIDENCE_INVALID",
+                "message": f"{where}[{idx}] must be an object with at least "
+                           f"{REQUIRED_EVIDENCE_KEYS}; prose is not evidence "
+                           f"(got {type(e).__name__}).",
+                "path": f"{where}[{idx}]",
+            })
+            continue
+        missing = [k for k in REQUIRED_EVIDENCE_KEYS
+                   if not str(e.get(k) or "").strip()]
+        if missing:
+            issues.append({
+                "code": "EVIDENCE_INVALID",
+                "message": f"{where}[{idx}] is missing: {', '.join(missing)}.",
+                "path": f"{where}[{idx}]",
+                "missing_keys": missing,
+            })
+    return issues
+
+
 def _validate(obj, date: str) -> list[dict]:
     """Structural check against the §6 return schema. Returns issue dicts."""
     issues: list[dict] = []
@@ -150,6 +187,8 @@ def _validate(obj, date: str) -> list[dict]:
                        f"(got {confidence!r}).",
         })
 
+    issues.extend(_validate_evidence(obj.get("evidence"), "evidence"))
+
     work_items = obj.get("work_items")
     if work_items is not None and not isinstance(work_items, list):
         issues.append({"code": "RESULT_SCHEMA_INVALID",
@@ -171,6 +210,9 @@ def _validate(obj, date: str) -> list[dict]:
                     "index": idx,
                     "missing_keys": item_missing,
                 })
+            issues.extend(
+                _validate_evidence(item.get("evidence"),
+                                   f"work_items[{idx}].evidence"))
     return issues
 
 

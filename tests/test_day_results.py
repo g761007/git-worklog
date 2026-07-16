@@ -16,6 +16,13 @@ import unittest
 from helpers import run_script, rmtree
 
 
+def _evidence(**overrides) -> dict:
+    e = {"commit": "abc1234", "file": "src/cache.py",
+         "symbol": "CacheLayer.get", "lines": "42-58", "note": "adds lookup"}
+    e.update(overrides)
+    return e
+
+
 def _valid_result(date: str, **overrides) -> dict:
     obj = {
         "date": date, "timezone": "Asia/Taipei",
@@ -28,7 +35,7 @@ def _valid_result(date: str, **overrides) -> dict:
             "implementation": "i", "impact": "im", "files": ["a.py"],
             "commits": ["abc1234"], "tests": [], "risks": [],
             "maintenance_notes": [], "follow_ups": [],
-            "confidence": "verified", "evidence": ["abc1234 a.py:1"],
+            "confidence": "verified", "evidence": [_evidence()],
         }],
         "fixes": [], "refactors": [], "tests": [], "database_changes": [],
         "configuration_changes": [], "deployment_changes": [],
@@ -203,6 +210,72 @@ class TestRead(unittest.TestCase):
                                                 escalation_recommended=True))
         d = self._read()
         self.assertEqual(d["escalation_suggested_dates"], ["2026-07-15"])
+
+    def test_prose_evidence_rejected(self):
+        # The exact shape a real subagent produced. It reads like evidence and
+        # would satisfy any prose-based rule, but cites nothing openable — no
+        # file, no symbol, no lines.
+        obj = _valid_result("2026-07-15")
+        obj["work_items"][0]["evidence"] = [
+            "commit 4d08ee4: 完整改造，加 authors[] 與 author_name"
+        ]
+        self._write("2026-07-15", obj)
+        d = self._read()
+        self.assertEqual(d["invalid"][0]["code"], "EVIDENCE_INVALID")
+        self.assertTrue(d["partial_run"])
+
+    def test_evidence_without_file_rejected(self):
+        # A bare hash does not tell a reader where to look.
+        obj = _valid_result("2026-07-15")
+        obj["work_items"][0]["evidence"] = [{"commit": "abc1234"}]
+        self._write("2026-07-15", obj)
+        d = self._read()
+        self.assertEqual(d["invalid"][0]["code"], "EVIDENCE_INVALID")
+        self.assertEqual(d["invalid"][0]["issues"][0]["missing_keys"], ["file"])
+
+    def test_evidence_without_commit_rejected(self):
+        obj = _valid_result("2026-07-15")
+        obj["work_items"][0]["evidence"] = [{"file": "src/cache.py"}]
+        self._write("2026-07-15", obj)
+        d = self._read()
+        self.assertEqual(d["invalid"][0]["issues"][0]["missing_keys"], ["commit"])
+
+    def test_blank_evidence_fields_rejected(self):
+        # Present-but-empty is the obvious way to satisfy a key check without
+        # citing anything.
+        obj = _valid_result("2026-07-15")
+        obj["work_items"][0]["evidence"] = [{"commit": "  ", "file": ""}]
+        self._write("2026-07-15", obj)
+        d = self._read()
+        self.assertEqual(sorted(d["invalid"][0]["issues"][0]["missing_keys"]),
+                         ["commit", "file"])
+
+    def test_top_level_prose_evidence_rejected(self):
+        obj = _valid_result("2026-07-15")
+        obj["evidence"] = ["整體來說改動很完整"]
+        self._write("2026-07-15", obj)
+        d = self._read()
+        self.assertEqual(d["invalid"][0]["code"], "EVIDENCE_INVALID")
+
+    def test_evidence_without_symbol_or_lines_accepted(self):
+        # A doc or config change has no symbol and no meaningful line range;
+        # requiring them would push subagents to invent them.
+        obj = _valid_result("2026-07-15")
+        obj["work_items"][0]["evidence"] = [
+            {"commit": "abc1234", "file": "README.md", "note": "usage section"}
+        ]
+        self._write("2026-07-15", obj)
+        d = self._read()
+        self.assertEqual(d["complete"], ["2026-07-15"])
+        self.assertFalse(d["partial_run"])
+
+    def test_empty_evidence_list_accepted(self):
+        # A no-change day cites nothing; that is not a violation.
+        obj = _valid_result("2026-07-15", has_changes=False, work_items=[],
+                            evidence=[])
+        self._write("2026-07-15", obj)
+        d = self._read()
+        self.assertEqual(d["complete"], ["2026-07-15"])
 
     def test_missing_run_dir_refused(self):
         d, rc, _ = run_script("collect_day_results.py",

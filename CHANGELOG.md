@@ -41,10 +41,30 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   there and replies only `DONE`; the orchestrator collects and validates the lot
   (`read`). See `references/subagent-contract.md` §6a.
 - `tests/test_report_scope.py` and `tests/test_day_results.py`, plus multi-author
-  and tagged fixtures (suite grows 97 → 152).
+  and tagged fixtures (suite grows 97 → 162).
 
 ### Changed
 
+- **BREAKING:** `evidence[]` entries — at the top level and inside each
+  `work_item` — are now **objects, not strings**:
+  `{commit, file, symbol?, lines?, note?}`, with `commit` and `file` required.
+  `collect_day_results.py read` rejects prose or a missing `commit`/`file`
+  (`EVIDENCE_INVALID`) and marks the day failed. Free text reliably decayed into
+  a restatement of the commit subject — a real run produced
+  `"commit 4d08ee4: 完整改造，加 authors[] 與 author_name"`, which cites nothing a
+  reader can open yet satisfies any prose-based rule. `symbol` and `lines` stay
+  optional so a doc or config change is not pushed to invent them.
+- **Subagents must read the day's tree, not the working checkout**
+  (`code-analysis-rules.md` §5a, new). The checkout carries every change made
+  since the day being analysed. Subagents now read at the commit
+  (`git show <hash>:<path>`, `git ls-tree -r <hash>`,
+  `git grep -c <pattern> <hash> -- <path>`) and **must not run the test suite, a
+  build, or a linter** — those measure today. Consulting the present is allowed
+  only to answer "does this still exist now?", and such statements must be
+  labelled as today's. The old rule permitted checking "the current version of
+  that code" without qualification, and a real run took that licence: analysing
+  2026-07-15 it ran the current suite and recorded "Ran 132 tests" as that day's
+  result, when the suite had 44 tests that day.
 - **Day Subagents deliver results by writing a file, not by returning them.** The
   return channel was the pipeline's weakest link: it drops content (observed — a
   subagent that spent 63k tokens on correct analysis returned nothing, losing the
@@ -58,7 +78,6 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   explicitly. **A missing result is a failed day, never an empty one** — it is
   never silently skipped and never back-filled from commit messages, and it sets
   `partial_run`, which blocks apply by default.
-
 - Two golden rules are now scoped per mode rather than weakened:
   - The 30-day cap bounds per-day subagent cost, so it governs generation and
     backfill. Report mode reads day files already on disk and spawns no
