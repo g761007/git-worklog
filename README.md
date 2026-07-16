@@ -45,7 +45,9 @@ repo_worklog/                 # the skill (this whole directory is the skill)
     ├── worklog-format.md
     └── provider-models.md
 
-docs/init_plan.md             # the original design specification (single-file era)
+docs/plans/                   # design plans, newest last (yyyy-MM-dd-<topic>.md)
+├── 2026-07-15-repo-worklog-skill-design.md   # the original spec (single-file era)
+└── 2026-07-16-commit-author-and-report-mode.md
 ```
 
 The worklog itself is written to `PROJECT_WORKLOG/` at the repository root:
@@ -159,7 +161,8 @@ inspection, the analysis manifest, the day-file engine (create, overwrite,
 MANUAL preservation, no-change, corruption refusal), the index rebuild (summaries,
 ordering, MANUAL preservation), both validators, multi-file preview consistency,
 legacy migration, and the full deterministic pipeline. CI runs the same suite
-(see `.github/workflows/ci.yml`). `docs/init_plan.md` section 27 lists the broader
+(see `.github/workflows/ci.yml`).
+`docs/plans/2026-07-15-repo-worklog-skill-design.md` section 27 lists the broader
 acceptance-test matrix.
 
 ### Safety model
@@ -215,7 +218,9 @@ subagent 分析，所有變更都先以 dry-run 預覽，**經你明確確認後
     - `worklog_markers.py`：共用的日期檔／索引解析／序列化模組。
   - `references/`：skill 依需求載入的詳細規格（互動流程、日期契約、程式碼分析規則、
     subagent 契約、工作日誌格式、模型設定）。
-- `docs/init_plan.md`：原始設計規格（單檔時代）。
+- `docs/plans/`：設計計畫，檔名格式 `yyyy-MM-dd-<主題>.md`。
+  - `2026-07-15-repo-worklog-skill-design.md`：原始設計規格（單檔時代）。
+  - `2026-07-16-commit-author-and-report-mode.md`：commit 作者與報告模式。
 
 工作日誌本身寫在 repository 根目錄的 `PROJECT_WORKLOG/`：
 

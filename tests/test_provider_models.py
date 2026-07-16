@@ -283,8 +283,8 @@ class TestConfigIsSingleSource(unittest.TestCase):
 class TestNoRetiredDefaults(unittest.TestCase):
     """Old default model names must not reappear as active defaults.
 
-    Scoped to the shipped skill (repo_worklog/). The historical design doc
-    docs/init_plan.md is intentionally excluded — it records the pre-change plan.
+    Scoped to the shipped skill (repo_worklog/). The historical design docs under
+    docs/plans/ are intentionally excluded — they record pre-change plans.
     The old names claude-sonnet-5 / gpt-5.6-terra are permitted ONLY as escalation
     config; gemini-3-flash-preview (the retired google default) must be gone.
     """
