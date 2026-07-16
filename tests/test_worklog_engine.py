@@ -319,6 +319,110 @@ class TestUpdateDaily(unittest.TestCase):
         self.assertEqual([f for f in os.listdir(day_dir) if f.startswith(".rw-")], [])
 
 
+class TestIndexLanguage(unittest.TestCase):
+    """§6.2.12: the index picks a language once and then keeps it."""
+
+    def setUp(self):
+        self.work = tempfile.mkdtemp(prefix="rw_idxlang_")
+        self.dir = os.path.join(self.work, wm.WORKLOG_DIRNAME)
+        run_script("update_daily_worklog.py", ["--dir", self.dir, "--apply"],
+                   stdin=day_entries({"2026-07-15": "## 當日摘要\n\nnewest"}))
+
+    def tearDown(self):
+        rmtree(self.work)
+
+    def _rebuild(self, language=None):
+        args = ["--dir", self.dir, "--apply"]
+        if language:
+            args += ["--language", language]
+        d, _, err = run_script("rebuild_worklog_index.py", args, stdin="")
+        self.assertIsNotNone(d, err)
+        return d
+
+    def _index(self):
+        with open(wm.index_path(self.dir), encoding="utf-8") as fh:
+            return fh.read()
+
+    def _write_config(self, **keys):
+        os.makedirs(self.dir, exist_ok=True)
+        with open(wm.config_path(self.dir), "w", encoding="utf-8") as fh:
+            json.dump({"schema_version": 1, **keys}, fh)
+
+    def test_first_build_stamps_the_runs_language(self):
+        d = self._rebuild("en")
+        self.assertEqual(d["index_language"], "en")
+        self.assertEqual(d["index_language_source"], "run")
+        self.assertEqual(wm.index_language_of(self._index()), "en")
+        self.assertIn("| Date | Summary |", self._index())
+
+    def test_a_later_run_in_another_language_does_not_rewrite_the_index(self):
+        # The churn §6.2.12 exists to prevent: a zh-TW developer and an English
+        # one must not flip the headings back and forth in every diff.
+        self._rebuild("en")
+        first = self._index()
+        d = self._rebuild("zh-TW")
+        self.assertEqual(d["index_language"], "en")
+        self.assertEqual(d["index_language_source"], "existing-index")
+        self.assertEqual(d["action"], "no_change")
+        self.assertEqual(self._index(), first)
+
+    def test_config_pin_outranks_the_run_and_the_existing_stamp(self):
+        self._rebuild("en")
+        self._write_config(index_language="zh-TW")
+        d = self._rebuild("en")
+        self.assertEqual(d["index_language"], "zh-TW")
+        self.assertEqual(d["index_language_source"], "project-config")
+        self.assertIn("| 日期 | 摘要 |", self._index())
+
+    def test_config_auto_is_not_a_pin(self):
+        # "auto" ships in every config.json and means nobody decided.
+        self._write_config(index_language="auto")
+        d = self._rebuild("ja")
+        self.assertEqual(d["index_language"], "ja")
+        self.assertEqual(d["index_language_source"], "run")
+
+    def test_an_existing_unstamped_index_stays_traditional_chinese(self):
+        self._rebuild("zh-TW")
+        # Every index written before this contract is zh-TW and carries no
+        # stamp. Reading "no stamp" as "undecided" would retitle all of them on
+        # upgrade -- a rewrite nobody asked for, in a committed file.
+        raw = self._index().replace(f"INDEX:GENERATED:START lang=zh-TW",
+                                    "INDEX:GENERATED:START")
+        with open(wm.index_path(self.dir), "w", encoding="utf-8") as fh:
+            fh.write(raw)
+        d = self._rebuild("en")
+        self.assertEqual(d["index_language"], "zh-TW")
+        self.assertEqual(d["index_language_source"], "existing-index-unstamped")
+        self.assertIn("| 日期 | 摘要 |", self._index())
+
+    def test_an_unstamped_index_still_parses(self):
+        self._rebuild("zh-TW")
+        raw = self._index().replace("INDEX:GENERATED:START lang=zh-TW",
+                                    "INDEX:GENERATED:START")
+        doc = wm.parse_index(raw)
+        self.assertTrue(doc.rows)
+        self.assertIsNone(wm.index_language_of(raw))
+
+    def test_a_language_without_chrome_gets_english_furniture(self):
+        # Honest degradation: day summaries stay in their own language, and the
+        # furniture around them falls back rather than being machine-translated
+        # into something nobody here can proofread.
+        d = self._rebuild("ko")
+        self.assertEqual(d["index_language"], "ko")
+        self.assertIn("| Date | Summary |", self._index())
+        self.assertEqual(wm.index_language_of(self._index()), "ko")
+
+    def test_manual_region_survives_a_language_pin(self):
+        self._rebuild("en")
+        raw = self._index().replace(
+            "Add anything worth knowing", "我自己寫的說明，不要動它。Add anything")
+        with open(wm.index_path(self.dir), "w", encoding="utf-8") as fh:
+            fh.write(raw)
+        self._write_config(index_language="zh-TW")
+        self._rebuild()
+        self.assertIn("我自己寫的說明，不要動它。", self._index())
+
+
 class TestRebuildIndex(unittest.TestCase):
     def setUp(self):
         self.work = tempfile.mkdtemp(prefix="rw_idx_")

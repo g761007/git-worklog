@@ -90,8 +90,14 @@ _ANY_PREFIX = f"(?:{PREFIX}|{LEGACY_PREFIX})"
 _DAY_MARKER_RE = re.compile(
     rf"^<!--\s*{_ANY_PREFIX}:(\d{{4}}-\d{{2}}-\d{{2}}):(GENERATED|MANUAL):(START|END)\s*-->$"
 )
+# The optional lang= attribute records the language the index was first built
+# in (§6.2.12). It is optional because every index.md written before the
+# language contract lacks it and must keep parsing: an index that suddenly fails
+# to parse would read as INDEX_MISSING_GENERATED, i.e. a corrupt file, over a
+# purely additive change.
 _INDEX_MARKER_RE = re.compile(
-    rf"^<!--\s*{_ANY_PREFIX}:INDEX:(GENERATED|MANUAL):(START|END)\s*-->$"
+    rf"^<!--\s*{_ANY_PREFIX}:INDEX:(GENERATED|MANUAL):(START|END)"
+    rf"(?:\s+lang=([A-Za-z0-9-]+))?\s*-->$"
 )
 # Accept an em dash or a plain hyphen between the title and the date.
 _DAY_TITLE_RE = re.compile(r"^#\s+Project Worklog\s+[—–-]\s+(\d{4}-\d{2}-\d{2})\s*$")
@@ -486,15 +492,54 @@ def overwrite_day_generated(text: str, date: str, generated_md: str, *,
 # --- index model -------------------------------------------------------------
 
 
-DEFAULT_INDEX_MANUAL = "可在此補充專案工作日誌的閱讀方式、重要里程碑或交接說明。\n"
+# The index's own furniture: everything on the page that is not a day's summary.
+# A catalog is safe here in a way it would not be for day files, because this
+# text is rendered by this function -- there is no LLM in the loop to reproduce
+# it approximately, so a heading cannot drift and silently stop matching.
+#
+# Only the languages this project can actually vouch for are listed. An index
+# resolved to any other language gets English furniture around day summaries
+# written in that language, which is honest; inventing translations nobody here
+# can proofread would not be.
+_INDEX_CHROME = {
+    "zh-TW": {
+        "title": "Project Worklog",
+        "intro": ("> 本目錄依據 Git commit、實際程式碼 diff 與相關程式碼上下文產生。\n"
+                  "> 用於專案維護、交接與異動追蹤。\n"
+                  "> 日期依執行環境的本地時區判定。"),
+        "section": "工作日誌",
+        "col_date": "日期",
+        "col_summary": "摘要",
+        "manual_section": "人工說明",
+        "manual_default": "可在此補充專案工作日誌的閱讀方式、重要里程碑或交接說明。\n",
+    },
+    "en": {
+        "title": "Project Worklog",
+        "intro": ("> Generated from Git commits, the actual code diffs and the\n"
+                  "> surrounding code context. Used for maintenance, handover and\n"
+                  "> change tracking. Dates follow the local timezone of the run."),
+        "section": "Worklog",
+        "col_date": "Date",
+        "col_summary": "Summary",
+        "manual_section": "Notes",
+        "manual_default": ("Add anything worth knowing about how to read this "
+                           "worklog: milestones, handover notes, context.\n"),
+    },
+}
 
-_INDEX_HEADER = (
-    "# Project Worklog\n\n"
-    "> 本目錄依據 Git commit、實際程式碼 diff 與相關程式碼上下文產生。\n"
-    "> 用於專案維護、交接與異動追蹤。\n"
-    "> 日期依執行環境的本地時區判定。\n\n"
-    "## 工作日誌\n\n"
-)
+INDEX_CHROME_LANGUAGES = tuple(_INDEX_CHROME)
+DEFAULT_INDEX_LANGUAGE = "zh-TW"
+
+
+def index_chrome(language: "str | None") -> dict:
+    """The index's furniture for ``language``, falling back to English."""
+    if language in _INDEX_CHROME:
+        return _INDEX_CHROME[language]
+    return _INDEX_CHROME["en"]
+
+
+# Kept as a module constant because callers outside this module reach for it.
+DEFAULT_INDEX_MANUAL = _INDEX_CHROME[DEFAULT_INDEX_LANGUAGE]["manual_default"]
 
 
 @dataclass
@@ -576,25 +621,49 @@ def clean_summary(text: str) -> str:
 
 
 def render_index(rows: list[tuple[str, str]], manual_inner: str | None = None,
-                 layout: str | None = None) -> str:
-    """Render index.md from ``rows`` (caller sorts them date-descending)."""
+                 layout: str | None = None,
+                 language: "str | None" = None) -> str:
+    """Render index.md from ``rows`` (caller sorts them date-descending).
+
+    ``language`` is stamped onto the GENERATED marker so the next rebuild uses
+    the same one (§6.2.12). Without that, an index rebuilt by a zh-TW agent on
+    Monday and an English one on Tuesday would flip its headings every run and
+    churn the diff of a file teams commit.
+    """
+    if language is None:
+        language = DEFAULT_INDEX_LANGUAGE
+    chrome = index_chrome(language)
     if manual_inner is None:
-        manual_inner = DEFAULT_INDEX_MANUAL
-    table = ["| 日期 | 摘要 |", "|---|---|"]
+        manual_inner = chrome["manual_default"]
+    table = [f"| {chrome['col_date']} | {chrome['col_summary']} |", "|---|---|"]
     for date, summary in rows:
         table.append(f"| [{date}]({day_link(date, layout)}) | {summary} |")
     gen_body = "\n".join(table)
     parts = [
-        _INDEX_HEADER,
-        f"<!-- {PREFIX}:INDEX:GENERATED:START -->\n",
+        f"# {chrome['title']}\n\n{chrome['intro']}\n\n## {chrome['section']}\n\n",
+        f"<!-- {PREFIX}:INDEX:GENERATED:START lang={language} -->\n",
         gen_body + "\n",
         f"<!-- {PREFIX}:INDEX:GENERATED:END -->\n",
-        "\n## 人工說明\n\n",
+        f"\n## {chrome['manual_section']}\n\n",
         f"<!-- {PREFIX}:INDEX:MANUAL:START -->\n",
         manual_inner,
         f"<!-- {PREFIX}:INDEX:MANUAL:END -->\n",
     ]
     return "".join(parts)
+
+
+def index_language_of(text: str) -> "str | None":
+    """The language an existing index.md was built in, or None if unstamped.
+
+    None means "written before the marker carried a language", not "English":
+    those indexes are zh-TW, which is why callers treat an unstamped index as
+    already fixed to the default rather than re-deciding it.
+    """
+    for raw in text.splitlines():
+        m = _INDEX_MARKER_RE.match(raw.strip())
+        if m and m.group(1) == "GENERATED" and m.group(2) == "START":
+            return m.group(3)
+    return None
 
 
 def scan_index(text: str) -> tuple[IndexDoc | None, list[dict]]:
