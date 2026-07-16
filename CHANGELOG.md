@@ -4,6 +4,52 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Renamed to Git Worklog.** The repository is now `git-worklog`, the skill
+  directory is `git-worklog/`, and the skill is invoked with `/git-worklog`.
+  Reinstall to `~/.claude/skills/git-worklog` (or re-point your symlink) — an
+  install left at the old path keeps answering to the old command.
+
+  The skill directory and the frontmatter `name` had to move together: in Claude
+  Code the **directory name is the command name**, and frontmatter `name` is only
+  the display name. Renaming just the frontmatter — which is what the v1.0
+  roadmap's PR 1 originally scoped — would have left `/repo_worklog` as the real
+  command while every doc told users to type `/git-worklog`. So this change also
+  updates the two hard-coded `repo_worklog/scripts` paths in CI and the two in
+  `tests/`.
+
+  Not renamed yet, to keep this change to names only: the `PROJECT_WORKLOG/`
+  output directory, the `~/.repo_worklog/` state directory, and the
+  `REPO_WORKLOG_*_MODEL` environment variables. Those carry data and behaviour
+  and move with their own migrations. See `docs/naming-conventions.md` for what
+  is active versus planned.
+
+- **Subagents no longer report counts; they report coverage.** `tests[]` now
+  names each test file and the behaviour it pins — never how many tests exist
+  (no `count` field, no "N 個測試"). More broadly: **never state a quantity you
+  did not measure**. If a number is load-bearing, derive it from the day's tree
+  with a command and cite it in `evidence[]`.
+- `verified` is tightened: it means provable from code/diff/tests **you actually
+  opened, at the day's commit**. A quantity you did not run a command to measure
+  is never `verified`.
+
+  Why: v0.4.0's §5a stopped subagents *measuring the wrong repository*, and a
+  re-run showed they simply started *inventing* instead — every per-file test
+  count was wrong (13/12/10/8 against an actual 12/18/13/1), all labelled
+  `verified`, with `uncertainties: []`. Closing one route to an unverified number
+  opened another, so the fix is to stop asking for the number: coverage is
+  provable from the diff, a count is not, and a worklog reader needs to know what
+  a test protects rather than how many there are. `tests[]` had never been
+  specified at all, which is how it filled with invented counts in the first
+  place.
+
+  Note this is **not enforced by `collect_day_results.py`** — schema validation
+  catches shape, not truth, and a fabricated number in a prose field is
+  well-formed. That is a known limit, not an oversight.
+
 ## [0.4.0] - 2026-07-16
 
 ### Added
@@ -222,8 +268,8 @@ satisfied.
 - A stdlib-only `unittest` suite and GitHub Actions CI on Python 3.9 / 3.12 / 3.13,
   with a `skill.zip` release artifact.
 
-[0.4.0]: https://github.com/g761007/repo_worklog_skill/compare/v0.3.1...v0.4.0
-[0.3.1]: https://github.com/g761007/repo_worklog_skill/compare/v0.3.0...v0.3.1
-[0.3.0]: https://github.com/g761007/repo_worklog_skill/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/g761007/repo_worklog_skill/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/g761007/repo_worklog_skill/releases/tag/v0.1.0
+[0.4.0]: https://github.com/g761007/git-worklog/compare/v0.3.1...v0.4.0
+[0.3.1]: https://github.com/g761007/git-worklog/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/g761007/git-worklog/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/g761007/git-worklog/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/g761007/git-worklog/releases/tag/v0.1.0
