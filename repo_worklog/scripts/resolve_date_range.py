@@ -25,6 +25,9 @@ import sys
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+# Default span cap. It exists to bound per-day subagent cost, so it governs
+# worklog generation and backfill. Report mode only reads day files already on
+# disk and spawns no subagents, so it overrides this with --max-days.
 MAX_DAYS = 30
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _SHORTCUT_DAYS_RE = re.compile(r"^(\d+)d$")
@@ -138,6 +141,17 @@ def _absorb_shortcut(args: argparse.Namespace) -> None:
 
 def resolve(args: argparse.Namespace) -> dict:
     tz, tz_name, tz_source = detect_timezone(args.timezone)
+    max_days = getattr(args, "max_days", None)
+    # Explicit None check: `or MAX_DAYS` would treat --max-days 0 as unset and
+    # silently restore the default instead of rejecting it.
+    if max_days is None:
+        max_days = MAX_DAYS
+    if max_days < 1:
+        _fail([{
+            "code": "BAD_MAX_DAYS",
+            "max_days": max_days,
+            "message": f"max-days must be at least 1 (got {max_days}).",
+        }])
 
     today = (
         _parse_iso_date(args.today, "today")
@@ -173,6 +187,7 @@ def resolve(args: argparse.Namespace) -> dict:
         "timezone_source": tz_source,
         "include_uncommitted": include_uncommitted,
         "today": today.isoformat(),
+        "max_days": max_days,
         "errors": [],
     }
 
@@ -182,12 +197,12 @@ def resolve(args: argparse.Namespace) -> dict:
         return {**common, "mode": "date", "days_count": 1, "dates": days}
 
     if has_days:
-        if not isinstance(args.days, int) or args.days < 1 or args.days > MAX_DAYS:
+        if not isinstance(args.days, int) or args.days < 1 or args.days > max_days:
             _fail([{
                 "code": "DAYS_OUT_OF_RANGE",
                 "requested_days": args.days,
-                "max_days": MAX_DAYS,
-                "message": f"days must be an integer between 1 and {MAX_DAYS} (got {args.days}).",
+                "max_days": max_days,
+                "message": f"days must be an integer between 1 and {max_days} (got {args.days}).",
             }])
         start_day = today - timedelta(days=args.days - 1)
         days = [_day_bounds(start_day + timedelta(days=i), tz)
@@ -210,13 +225,13 @@ def resolve(args: argparse.Namespace) -> dict:
             "message": f"from ({d_from}) must not be later than to ({d_to}).",
         }])
     total = (d_to - d_from).days + 1
-    if total > MAX_DAYS:
+    if total > max_days:
         _fail([{
             "code": "TOO_MANY_DAYS",
             "requested_days": total,
-            "max_days": MAX_DAYS,
+            "max_days": max_days,
             "message": (f"The requested range spans {total} days, exceeding the "
-                        f"{MAX_DAYS}-day limit. Narrow the range to {MAX_DAYS} days or fewer."),
+                        f"{max_days}-day limit. Narrow the range to {max_days} days or fewer."),
         }])
     days = [_day_bounds(d_from + timedelta(days=i), tz) for i in range(total)]
     return {**common, "mode": "range", "days_count": total, "dates": days}
@@ -233,6 +248,11 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Include working tree changes (recorded, applied only to today).")
     p.add_argument("--timezone", help="Explicit IANA timezone override, e.g. Asia/Taipei.")
     p.add_argument("--today", help="Override today's date (YYYY-MM-DD) for deterministic runs.")
+    p.add_argument("--max-days", type=int, default=MAX_DAYS,
+                   help=f"Maximum span in calendar days (default: {MAX_DAYS}). The "
+                        "default bounds per-day subagent cost and applies to worklog "
+                        "generation and backfill. Report mode reads existing day files "
+                        "and spawns no subagents, so it raises this cap.")
     return p
 
 
