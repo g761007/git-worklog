@@ -97,8 +97,8 @@ where it would corrupt a file) but is never written.
 
 ## Versions
 
-Distinct numbers that are easy to confuse. See issue #11 for unifying them at
-v1.0.0.
+Distinct numbers that are easy to confuse. See issue #12 for giving the product
+version a single source of truth and shipping v1.0.0.
 
 | | |
 | --- | --- |
