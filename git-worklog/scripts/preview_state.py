@@ -20,7 +20,8 @@ The ``worklog`` block passed to ``create`` / ``verify`` therefore looks like::
 A change to any target day file, to index.md, or to the set of day files (which
 would change the rebuilt index) invalidates the preview.
 
-State is stored outside the repository (``~/.repo_worklog/previews/``) so a
+State is stored outside the repository (``~/.git-worklog/previews/``, or
+``$GIT_WORKLOG_HOME/previews/``) so a
 dry-run never touches the working tree.
 
 Subcommands:
@@ -40,7 +41,11 @@ import os
 import sys
 from datetime import datetime, timezone
 
-STATE_DIR = os.path.join(os.path.expanduser("~"), ".repo_worklog", "previews")
+import _bootstrap  # noqa: F401 — must precede any git_worklog import
+
+from git_worklog import paths
+
+STATE_DIR = paths.previews_dir()
 DEFAULT_TTL_SECONDS = 24 * 3600
 
 # Fields compared between create-time and apply-time, with a stable label.
@@ -109,7 +114,7 @@ def cmd_create(args: argparse.Namespace) -> int:
         "worklog": data.get("worklog", {}),
         "params": data.get("params", {}),
     }
-    os.makedirs(STATE_DIR, exist_ok=True)
+    paths.ensure_dir(STATE_DIR)
     with open(_preview_path(preview_id), "w", encoding="utf-8") as fh:
         json.dump(metadata, fh, ensure_ascii=False, indent=2)
 

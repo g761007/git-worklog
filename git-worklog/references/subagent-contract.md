@@ -296,7 +296,7 @@ python3 scripts/collect_day_results.py init --dates 2026-07-15,2026-07-16
 ```
 
 Returns `run_id`, `run_dir`, and `paths` — one output path per date. Results live
-outside the repository, under `~/.repo_worklog/analysis/<run_id>/<date>.json`,
+outside the repository, under `~/.git-worklog/analysis/<run_id>/<date>.json`,
 next to the preview state. The worklog directory is for the worklog; it is never
 used for scratch.
 

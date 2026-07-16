@@ -12,7 +12,8 @@ resolved model as JSON for ``build_analysis_manifest.py`` and the dry-run summar
 Override precedence for the model id (highest first):
 
   1. ``--model`` (explicit runtime/CLI model id)
-  2. environment variable ``REPO_WORKLOG_<HOST>_MODEL``
+  2. environment variable ``GIT_WORKLOG_<HOST>_MODEL`` (or the
+     deprecated ``REPO_WORKLOG_<HOST>_MODEL``)
   3. the provider default in ``config/provider_models.json``
 
 The host is NEVER guessed: a missing or unknown host is a configuration error,
@@ -51,7 +52,29 @@ def _fail(code: str, message: str, **extra) -> int:
 
 
 def _env_var(host: str) -> str:
+    return f"GIT_WORKLOG_{host.upper()}_MODEL"
+
+
+def _legacy_env_var(host: str) -> str:
+    """The pre-v0.7 name. Shipped in v0.3.0-v0.4.0, so it is still honoured."""
     return f"REPO_WORKLOG_{host.upper()}_MODEL"
+
+
+def _resolve_env(host: str) -> "tuple[str | None, str | None]":
+    """Read the model override from the environment.
+
+    Returns ``(value, deprecated_var_used)``. The current name wins; the legacy
+    one is honoured because it was publicly released and someone's shell profile
+    still exports it. Silently ignoring it would swap their model without a word
+    -- the one thing this script exists to never do.
+    """
+    val = os.environ.get(_env_var(host)) or None
+    if val:
+        return val, None
+    legacy = os.environ.get(_legacy_env_var(host)) or None
+    if legacy:
+        return legacy, _legacy_env_var(host)
+    return None, None
 
 
 def _candidates(providers: dict) -> list:
@@ -114,7 +137,7 @@ def resolve(args: argparse.Namespace) -> tuple[dict, int]:
         base_id = entry.get("model_id")
         base_effort = entry.get("reasoning_effort")
 
-    env_val = os.environ.get(_env_var(host)) or None
+    env_val, deprecated_var = _resolve_env(host)
     cli_val = args.model or None
     if cli_val:
         model_id, source = cli_val, "cli"
@@ -161,6 +184,18 @@ def resolve(args: argparse.Namespace) -> tuple[dict, int]:
         "model_unavailable_policy": config.get("model_unavailable_policy",
                                                "halt-and-ask"),
     }
+
+    # An honoured-but-renamed variable is reported, never silently obeyed: the
+    # user is picking a model, and they should know which knob actually did it.
+    if deprecated_var and source == "env":
+        result["warnings"] = [{
+            "code": "DEPRECATED_ENV_VAR",
+            "message": f"{deprecated_var} is deprecated and will be removed in "
+                       f"v2.0; rename it to {_env_var(host)}. It was honoured "
+                       "for this run.",
+            "deprecated": deprecated_var,
+            "replacement": _env_var(host),
+        }]
     esc_effort = entry.get("escalation_reasoning_effort")
     if esc_effort:
         result["escalation"]["reasoning_effort"] = esc_effort

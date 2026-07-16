@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "git-worklog"
+description = "Generate evidence-based engineering worklogs, reports, changelogs, handoff summaries, contribution reports, and technical-debt reviews from actual Git history and source-code changes."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+authors = [{ name = "Daniel Hsieh" }]
+keywords = ["git", "worklog", "changelog", "release-notes", "handoff"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Version Control :: Git",
+]
+# No runtime dependencies, on purpose: the package doubles as the skill's
+# engine, and the skill is installed by copying a directory. See dynamic
+# version below -- git_worklog/__init__.py is the single source of truth.
+dependencies = []
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/g761007/git-worklog"
+Repository = "https://github.com/g761007/git-worklog"
+Changelog = "https://github.com/g761007/git-worklog/blob/main/CHANGELOG.md"
+
+[project.scripts]
+git-worklog = "git_worklog.cli:main"
+
+# The package lives inside the skill directory rather than beside it, so that
+# copying `git-worklog/` into a host's skills folder yields a skill that runs
+# with no install at all -- `python3 scripts/<name>.py` still works because the
+# engine sits right there. Mapping the package root here means the same code is
+# also `pip install`-able for anyone who wants the standalone CLI on PATH.
+# (Roadmap §3 puts the package beside a `skill/` directory; that split is PR 7's,
+# and it must not cost the copy-to-install property.)
+[tool.setuptools]
+package-dir = { "" = "git-worklog" }
+
+[tool.setuptools.packages.find]
+where = ["git-worklog"]
+include = ["git_worklog*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "git_worklog.__version__" }

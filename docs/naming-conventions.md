@@ -48,19 +48,31 @@ skill ships.)
 
 | | |
 | --- | --- |
-| Command | `git-worklog` — Planned (PR 3) |
+| Command | `git-worklog` — Active |
+| Module form | `python3 -m git_worklog` — Active |
 
-Planned subcommands: `init`, `generate`, `report`, `validate`, `doctor`,
-`preview`, `apply`, `migrate`, `clean`, `version`.
+Implemented: `version`, `doctor`, `validate`. Planned: `init`, `generate`,
+`report`, `preview`, `apply`, `migrate`, `clean`.
+
+The console script exists only after `pip install`. The module form works
+straight from the skill directory with nothing installed, which is how the skill
+itself runs — the CLI is an option for humans and CI, never a requirement.
 
 ## Python package
 
 | | |
 | --- | --- |
-| Package | `git_worklog` — Planned (PR 3; currently loose scripts under `git-worklog/scripts/`) |
+| Package | `git_worklog` — Active |
+| Location | `git-worklog/git_worklog/` — inside the skill directory |
 
 Underscores, because it is a Python identifier. This is the only place the
 underscore form is correct.
+
+The package sits **inside** the skill directory rather than beside it, so that
+copying `git-worklog/` into a host's skills folder yields a working skill with
+nothing installed. `pyproject.toml` maps the package root there, so the same
+code is also pip-installable. (Roadmap §3 draws them as siblings; that split is
+PR 7's, and it must not cost the copy-to-install property.)
 
 ## Directories
 
@@ -69,8 +81,8 @@ underscore form is correct.
 | Project output | `.git-worklog/` — Active |
 | Day files | `.git-worklog/days/<date>.md` — Active |
 | Index | `.git-worklog/index.md` — Active |
-| User-level state | `~/.git-worklog/` — Planned (PR 3; currently `~/.repo_worklog/`) |
-| Home override env var | `GIT_WORKLOG_HOME` — Planned (PR 3; does not exist yet) |
+| User-level state | `~/.git-worklog/` — Active |
+| Home override env var | `GIT_WORKLOG_HOME` — Active |
 
 The pre-v0.6 project output was a flat `PROJECT_WORKLOG/` with day files at its
 root. It is still **readable** — `detect_layout()` probes for it — but not
@@ -91,9 +103,17 @@ where it would corrupt a file) but is never written.
 
 | | |
 | --- | --- |
-| Model overrides | `GIT_WORKLOG_{ANTHROPIC,OPENAI,GOOGLE}_MODEL` — Planned (PR 3; currently `REPO_WORKLOG_*`) |
+| State directory | `GIT_WORKLOG_HOME` — Active (new in v0.7; there was never a `REPO_WORKLOG_HOME`) |
+| Model overrides | `GIT_WORKLOG_{ANTHROPIC,OPENAI,GOOGLE}_MODEL` — Active |
+| Output language | `GIT_WORKLOG_LANGUAGE` — Planned (PR 4) |
 
 `SCREAMING_SNAKE_CASE`, always prefixed `GIT_WORKLOG_`.
+
+`REPO_WORKLOG_{ANTHROPIC,OPENAI,GOOGLE}_MODEL` shipped publicly in v0.3.0–v0.4.0
+and is **still honoured** — the current name wins, and a run that used the old
+one reports a `DEPRECATED_ENV_VAR` warning. Removed in v2.0. Dropping it early
+would silently swap a user's model back to the config default, which is the one
+thing the model resolver exists to prevent.
 
 ## Versions
 

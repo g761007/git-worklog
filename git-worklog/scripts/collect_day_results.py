@@ -21,7 +21,7 @@ human can read exactly what a subagent concluded.
 
 So: the orchestrator mints a run directory with ``init``, hands each subagent its
 own output path, and collects the lot with ``read``. Results live outside the
-repository, under ``~/.repo_worklog/analysis/<run_id>/<date>.json``, alongside
+repository, under ``~/.git-worklog/analysis/<run_id>/<date>.json``, alongside
 the preview state — the worklog directory is for the worklog, not for scratch.
 
 What ``read`` guarantees
@@ -43,9 +43,12 @@ import os
 import sys
 from datetime import datetime
 
-import worklog_markers as wm
+import _bootstrap  # noqa: F401 — must precede any git_worklog import
+import worklog_markers as wm  # noqa: F401
 
-ANALYSIS_DIR = os.path.join(os.path.expanduser("~"), ".repo_worklog", "analysis")
+from git_worklog import paths
+
+ANALYSIS_DIR = paths.analysis_dir()
 
 # Top-level keys required by the Day Subagent return schema
 # (references/subagent-contract.md §6). All must be present even when empty.
@@ -107,7 +110,7 @@ def cmd_init(args: argparse.Namespace) -> int:
         f"{now.isoformat()}|{','.join(dates)}".encode("utf-8")).hexdigest()[:6]
     run_id = f"rw-{now.strftime('%Y%m%d')}-{basis}"
     run_dir = args.run_dir or os.path.join(ANALYSIS_DIR, run_id)
-    os.makedirs(run_dir, exist_ok=True)
+    paths.ensure_dir(run_dir)
     _emit({
         "ok": True,
         "run_id": run_id,
@@ -296,7 +299,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="Comma-separated ISO dates this run covers.")
     i.add_argument("--run-dir",
                    help="Override the run directory (default: "
-                        "~/.repo_worklog/analysis/<run_id>).")
+                        "~/.git-worklog/analysis/<run_id>).")
 
     r = sub.add_parser("read", help="Read and validate the run's result files.")
     r.add_argument("--run-dir", required=True, help="The run directory from init.")

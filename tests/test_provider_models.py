@@ -92,7 +92,7 @@ class TestProviderMapping(unittest.TestCase):
 
 
 class TestOverrides(unittest.TestCase):
-    """cli --model > env REPO_WORKLOG_<HOST>_MODEL > config default."""
+    """cli --model > env GIT_WORKLOG_<HOST>_MODEL > config default."""
 
     def test_no_override_uses_config_default(self):
         out, _, _ = run_script("resolve_provider_model.py", ["--host", "openai"])
@@ -102,16 +102,55 @@ class TestOverrides(unittest.TestCase):
     def test_env_override(self):
         out, _, _ = run_script(
             "resolve_provider_model.py", ["--host", "openai"],
-            env={"REPO_WORKLOG_OPENAI_MODEL": "gpt-5.6-luna-2026-07"})
+            env={"GIT_WORKLOG_OPENAI_MODEL": "gpt-5.6-luna-2026-07"})
         self.assertEqual(out["model"]["model_id"], "gpt-5.6-luna-2026-07")
         self.assertEqual(out["model_id_source"], "env")
+        self.assertNotIn("warnings", out)
 
     def test_cli_beats_env(self):
         out, _, _ = run_script(
             "resolve_provider_model.py", ["--host", "openai", "--model", "gpt-from-cli"],
-            env={"REPO_WORKLOG_OPENAI_MODEL": "gpt-from-env"})
+            env={"GIT_WORKLOG_OPENAI_MODEL": "gpt-from-env"})
         self.assertEqual(out["model"]["model_id"], "gpt-from-cli")
         self.assertEqual(out["model_id_source"], "cli")
+
+
+class TestLegacyEnvVar(unittest.TestCase):
+    """REPO_WORKLOG_<HOST>_MODEL shipped in v0.3.0-v0.4.0 and is still honoured."""
+
+    def test_legacy_var_still_selects_the_model(self):
+        # Ignoring it would silently swap the user's model back to the config
+        # default -- the exact silent substitution this script exists to prevent.
+        out, _, _ = run_script(
+            "resolve_provider_model.py", ["--host", "openai"],
+            env={"REPO_WORKLOG_OPENAI_MODEL": "gpt-from-legacy"})
+        self.assertEqual(out["model"]["model_id"], "gpt-from-legacy")
+        self.assertEqual(out["model_id_source"], "env")
+
+    def test_legacy_var_is_reported_not_silently_obeyed(self):
+        out, _, _ = run_script(
+            "resolve_provider_model.py", ["--host", "openai"],
+            env={"REPO_WORKLOG_OPENAI_MODEL": "gpt-from-legacy"})
+        warn = out["warnings"][0]
+        self.assertEqual(warn["code"], "DEPRECATED_ENV_VAR")
+        self.assertEqual(warn["deprecated"], "REPO_WORKLOG_OPENAI_MODEL")
+        self.assertEqual(warn["replacement"], "GIT_WORKLOG_OPENAI_MODEL")
+
+    def test_current_var_wins_over_legacy(self):
+        out, _, _ = run_script(
+            "resolve_provider_model.py", ["--host", "openai"],
+            env={"GIT_WORKLOG_OPENAI_MODEL": "gpt-current",
+                 "REPO_WORKLOG_OPENAI_MODEL": "gpt-legacy"})
+        self.assertEqual(out["model"]["model_id"], "gpt-current")
+        self.assertNotIn("warnings", out)   # nothing deprecated was used
+
+    def test_cli_still_beats_the_legacy_var(self):
+        out, _, _ = run_script(
+            "resolve_provider_model.py", ["--host", "openai", "--model", "gpt-cli"],
+            env={"REPO_WORKLOG_OPENAI_MODEL": "gpt-legacy"})
+        self.assertEqual(out["model"]["model_id"], "gpt-cli")
+        self.assertEqual(out["model_id_source"], "cli")
+        self.assertNotIn("warnings", out)   # the legacy var did not decide anything
 
 
 class TestManifestModel(unittest.TestCase):

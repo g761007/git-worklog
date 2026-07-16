@@ -6,7 +6,55 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **A `git-worklog` CLI, and the `git_worklog` package behind it.** First three
+  commands (roadmap §12.1): `version` reports the CLI, layout and config-schema
+  versions separately; `doctor` checks whether this environment can actually run
+  the tool; `validate` checks whether the worklog on disk is well-formed. Each
+  prints one JSON object like the scripts do, `--text` renders for humans, and
+  exit codes separate "it ran and the answer is no" (1) from "it could not run"
+  (2).
+
+  The package lives **inside** the skill directory (`git-worklog/git_worklog/`),
+  not beside it. Copying the skill folder still yields a working skill with
+  nothing installed and no dependencies — `pyproject.toml` maps the package root
+  there, so the same code is *also* `pip install`-able for anyone who wants the
+  command on PATH. Roadmap §3 draws the two as siblings; that split is PR 7's,
+  and it must not cost the copy-to-install property.
+
+  `git_worklog/__init__.py`'s `__version__` is now the single source of the
+  product version — `pyproject.toml` reads it dynamically, and CI asserts the
+  installed console script agrees with it. See issue #12.
+
+  `doctor` and `validate` report what they did **not** check (`skipped`) rather
+  than omitting it: the language checks in §12.1 have nothing to check until the
+  language contract lands, and preview/analysis records are validated inside a
+  run, where the run id is known. A green check should never imply more coverage
+  than it has.
+
+- **`GIT_WORKLOG_HOME`** overrides the user-level state directory, which is now
+  `~/.git-worklog/` (was `~/.repo_worklog/`). Nothing is migrated: previews
+  expire in 24h and analysis files are diagnostic leftovers, so a stale copy is
+  noise, not loss — `doctor` points the old directory out and leaves deleting it
+  to you. Newly created state directories are `0700`; they quote source and diffs
+  from private repositories. This variable is new, not a rename — there was never
+  a `REPO_WORKLOG_HOME`.
+
 ### Changed
+
+- **Model override variables are now `GIT_WORKLOG_{ANTHROPIC,OPENAI,GOOGLE}_MODEL`.**
+  The `REPO_WORKLOG_*` names shipped publicly in v0.3.0–v0.4.0 and are **still
+  honoured** — dropping them would silently swap a user's model back to the
+  config default, which is precisely what the resolver exists to prevent. The
+  current name wins when both are set, and a run that used an old name reports
+  `DEPRECATED_ENV_VAR` in `warnings[]` rather than obeying it quietly. Removed in
+  v2.0.
+
+- `worklog_markers.py` moved to `git_worklog/markers.py` so the CLI and the
+  scripts share one definition of the format. `scripts/worklog_markers.py`
+  remains as a shim that re-exports it, so every script and every existing import
+  keeps working unchanged.
 
 - **The worklog now lives in `.git-worklog/`, with day files under `days/`.**
   `PROJECT_WORKLOG/<date>.md` → `.git-worklog/days/<date>.md`;

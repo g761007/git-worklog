@@ -27,18 +27,55 @@ jobs:
           python --version
           git --version
 
-      - name: Byte-compile all scripts
-        run: python -m py_compile git-worklog/scripts/*.py
+      - name: Byte-compile the package and scripts
+        run: |
+          python -m compileall -q git-worklog/git_worklog
+          python -m py_compile git-worklog/scripts/*.py
 
       - name: Smoke-test each script CLI (--help)
         run: |
           for s in git-worklog/scripts/*.py; do
             case "$s" in
+              */_*.py) continue ;;              # bootstrap helper, no CLI
               *worklog_markers.py) continue ;;  # shared module, no CLI
             esac
             echo "checking $s"
             python "$s" --help > /dev/null
           done
 
+      # The skill is installed by copying a directory, so the engine must import
+      # with nothing installed and nothing on PATH but the skill root itself.
+      - name: Smoke-test the CLI with no install
+        env:
+          PYTHONPATH: git-worklog
+        run: |
+          python -m git_worklog --help > /dev/null
+          python -m git_worklog version
+          python -m git_worklog --text doctor || true   # warnings are not failures here
+          python -m git_worklog validate --dir .git-worklog
+
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
+
+  package:
+    # Packaging breaks quietly and only at install time, so build and install it
+    # for real rather than trusting pyproject to be right.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install from source
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+      - name: The console entry point works and agrees with the package
+        run: |
+          cd "$(mktemp -d)"          # not the source tree: prove it is installed
+          git-worklog --version
+          git-worklog version
+          test "$(git-worklog --version)" = "git-worklog $(python -c 'import git_worklog; print(git_worklog.__version__)')"
