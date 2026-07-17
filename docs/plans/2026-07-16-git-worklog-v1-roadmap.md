@@ -135,33 +135,62 @@ PROJECT_WORKLOG/
 
 # 3. 目標專案結構
 
+> **修訂（2026-07-17,PR 7a）**:原規劃的 `skill/` + `git_worklog/` 平行拆分**已放棄**,
+> 套件維持在 skill 目錄內。理由見 §3.1。以下為實際結構。
+
 ~~~text
-git-worklog/
+git-worklog/                  # repo root
 ├── README.md
 ├── CHANGELOG.md
 ├── LICENSE
 ├── pyproject.toml
 │
-├── skill/
+├── git-worklog/              # 整個目錄就是 skill(= Claude Code 的觸發名)
 │   ├── SKILL.md
-│   ├── agents/
-│   │   └── openai.yaml
+│   ├── agents/openai.yaml
+│   ├── config/provider_models.json
 │   ├── references/
-│   └── assets/
-│
-├── git_worklog/
-│   ├── cli/
-│   ├── engine/
-│   ├── git/
-│   ├── report/
-│   ├── models/
-│   ├── storage/
-│   └── utils/
+│   ├── scripts/              # 套件的命令列薄殼
+│   └── git_worklog/          # 引擎 + CLI,住在 skill 目錄「內」
+│       ├── cli/
+│       ├── analysis/         # history / manifest / results / worktree / refs / coverage
+│       ├── markers.py  paths.py  language.py  config.py
+│       ├── dates.py    providers.py  migrate.py
+│       └── writer.py   preview.py
 │
 ├── tests/
-├── docs/
-└── examples/
+└── docs/
 ~~~
+
+## 3.1 為何不拆 `skill/` + `git_worklog/`
+
+§3 原本的平行佈局與 §14 的承諾互相矛盾:
+
+- §14:「Standalone 模式應為選配功能,**不應成為 Skill 使用 CLI 的必要條件**」。
+- SKILL.md 現在寫「nothing needs installing」,`python3 -m git_worklog` 從 skill 目錄
+  直接可跑——這只在套件位於 skill 目錄內時成立。
+
+一旦兩者變成 repo root 下的兄弟目錄,把 `skill/` 複製進 host 的 skills 資料夾就會得到
+一個沒有引擎的 skill,`python3 -m git_worklog` 直接 import 失敗。要救只有兩條路:打包時
+把套件 inline 進 staged 目錄(repo 佈局 ≠ 出貨佈局,且救不了 symlink 式的開發安裝),
+或要求 `pip install`(直接違反 §14)。兩者都是拿真實的使用者體驗換一個目錄圖。
+
+`pyproject.toml` 的註解在 PR 3 就標記了這顆地雷並留給 PR 7。PR 7a 的結論:**保留套件在
+skill 目錄內,放棄 §3 的拆分**。§15.2 的 `repo_worklog/ → skill/` 一併作廢——目錄已於
+PR 1 改名為 `git-worklog/`,那才是最終名稱(skill 目錄名 = 觸發名 = skill name)。
+
+## 3.2 為何沒有 `engine/` `git/` `models/` `storage/` `utils/`
+
+原規劃的五個子命名空間未建立。實際落點:
+
+- `engine`/`git` → 已由 `analysis/` 承擔(history 就是 git 讀取層)。
+- `storage` → `writer.py` + `preview.py`,兩個模組不需要一個目錄。
+- `models` → 全流程以 dict + JSON schema 溝通,沒有 model class 可放。
+- `report` → PR 8 的範圍,屆時若真的長出多種報告再建。
+- `utils` → 沒有無處可去的東西;真有了再說。
+
+為五個各只有一兩個模組的概念先建目錄,是替單一呼叫點造抽象。等某個概念大到目錄能還清
+它的成本再拆。
 
 ---
 
@@ -1184,26 +1213,17 @@ git-worklog
 
 ## 15.2 Skill Directory Rename
 
-~~~text
-repo_worklog/
-→
-skill/
-~~~
-
-或在過渡階段:
+> **修訂(2026-07-17,PR 7a)**:已完成,且**不再有第二階段**。
 
 ~~~text
 repo_worklog/
 →
-git-worklog/
+git-worklog/            # PR 1 完成,即最終名稱
 ~~~
 
-最終建議將 Skill 與 Python Package 分開:
-
-~~~text
-skill/
-git_worklog/
-~~~
+原文把 `git-worklog/` 當成過渡、最終要拆成 `skill/` + `git_worklog/`。該拆分已放棄
+(理由見 §3.1:與 §14 的「不需安裝」承諾衝突)。`git-worklog/` 是終點——skill 目錄名
+必須等於 Claude Code 的觸發名,也等於 skill name。
 
 ## 15.3 Python 名稱
 
