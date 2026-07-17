@@ -12,11 +12,13 @@ PATH.
 """
 
 # The single source of truth for the product version. pyproject.toml reads this
-# attribute; anything else that reports a version derives from here.
+# attribute; anything else that reports a version derives from here. The one copy
+# that cannot import it -- agents/openai.yaml, static YAML -- is pinned to it by a
+# guard test (tests/test_version.py), so the two cannot drift.
 #
-# Frozen at 0.4.0 through the internal v0.5-v0.9 milestones -- the last public
-# release -- and moves once, to 1.0.0, when v1.0 ships. See issue #12.
-__version__ = "0.4.0"
+# Held at 0.4.0 through the internal v0.5-v0.9 milestones, then moved here to
+# 1.0.0 for the first public release since v0.4.0. See issue #12.
+__version__ = "1.0.0"
 
 # On-disk layout version of `.git-worklog/`, re-exported for convenience. It
 # describes the *data*, not the tool, and bumps only when a migration is needed.

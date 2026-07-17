@@ -13,7 +13,7 @@ description: >-
   Generate evidence-based engineering worklogs, reports, changelogs, handoff
   summaries, contribution reports, and technical-debt reviews from actual Git
   history and source-code changes.
-version: 0.4.0
+version: 1.0.0
 
 # The skill body is the control layer; this manifest only carries metadata.
 entrypoint: SKILL.md
