@@ -5,11 +5,12 @@ markers, the index, and config. It reuses ``git_worklog.markers`` — the same
 parser the writers use — rather than re-deriving the rules, so validate can
 never disagree with what update/rebuild would produce.
 
-Roadmap §12.1 also lists preview records, analysis results, evidence links and
-language fields. Those are reported as ``skipped`` rather than quietly dropped:
-previews and analysis are transient user-level state (their own validators live
-in preview_state.py / collect_day_results.py, which run inside a pipeline where
-the run id is known), and the language contract does not exist yet (PR 4).
+Roadmap §12.1 also lists preview records, analysis results and evidence links.
+Those are reported as ``skipped`` rather than quietly dropped: they are transient
+user-level state, and their validators live in preview_state.py /
+collect_day_results.py, which run inside a pipeline where the run id is known. A
+result's language is checked there too, against the manifest that asked for it --
+a worklog directory has no manifest in scope to check against.
 """
 
 from __future__ import annotations

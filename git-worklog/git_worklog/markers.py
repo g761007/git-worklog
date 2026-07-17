@@ -283,8 +283,11 @@ def day_link(date: str, layout: str | None = None) -> str:
 def render_config(timezone: str | None = None) -> str:
     """The initial ``config.json`` body (roadmap §4.4).
 
-    ``language`` / ``index_language`` are written in their final shape but are
-    inert until the language contract lands; nothing reads them yet.
+    ``language`` and ``index_language`` default to ``auto``, meaning "nobody has
+    decided". Since this file is never rewritten once it exists, that default is
+    also what every worklog created before the language contract carries -- so
+    ``auto`` on disk is indistinguishable from a file the user never opened, and
+    git_worklog.config reads it as exactly that rather than as a choice.
     """
     config = {
         "schema_version": LAYOUT_VERSION,

@@ -30,8 +30,8 @@ sees and every decision that spans more than one day:
 - result-completeness checks (`collect_day_results.py read`: every dispatched
   date produced a valid object on disk),
 - cross-day deduplication,
-- Markdown generation (one GENERATED block per day; the `當日摘要` first line
-  becomes that day's row in `index.md`),
+- Markdown generation (one GENERATED block per day, in the run's resolved
+  language; the SUMMARY-marked line becomes that day's row in `index.md`),
 - dry-run, preview management, and writing (`update_daily_worklog.py`,
   `rebuild_worklog_index.py`, `preview_state.py`).
 
@@ -201,6 +201,7 @@ markdown fence.
 {
   "date": "YYYY-MM-DD",
   "timezone": "Asia/Taipei",
+  "language": "zh-TW",
   "status": "complete",
   "confidence": "verified",
   "escalation_recommended": false,
@@ -329,6 +330,75 @@ apply by default (§11).
 
 Result files are deliberately left in place after a run so a surprising worklog
 entry can be traced back to the analysis that produced it.
+
+---
+
+## 6b. Language (roadmap §6.2)
+
+**`language` is copied from the manifest's `language.resolved`, verbatim. It is
+never a choice.** The subagent does not decide, detect, negotiate or improve on
+it. Copy the tag exactly as given — `zh-TW` stays `zh-TW`, not `zh`, not
+`zh-Hant`, not `Traditional Chinese`.
+
+`collect_day_results.py` rejects the day if `language` is missing, is not a BCP
+47 tag, or is not the tag the manifest asked for. A rejected day blocks the whole
+run from apply, so getting this wrong wastes the entire analysis, not just the
+field.
+
+**Write every word of prose in the resolved language.** That means `summary`,
+`title`, `behavior_change`, `implementation`, `impact`, `risks`,
+`maintenance_notes`, `follow_ups`, `handoff_notes`, `uncertainties` — all of it.
+
+**The repository's language does not vote.** This is the rule most likely to be
+broken, because the pull toward English is constant and every input is shouting
+it: the commit messages are English, the identifiers are English, the comments
+are English, this contract is English, and the code you just read is English.
+None of that decides anything. A repository can be entirely English and the
+manifest can say `zh-TW`, and then the worklog is Traditional Chinese. That is
+not a conflict to resolve — it is the normal case.
+
+```text
+Commit message: Fix token refresh race condition
+Manifest language.resolved: zh-TW
+
+→ 修正 Token Refresh 的競態條件，避免多個更新請求同時覆寫憑證狀態。
+```
+
+**Never translate these, in any language:**
+
+| Never translated | Example |
+|---|---|
+| File and directory paths | `src/auth/token_manager.py` |
+| Code symbols | `refresh_token`, `TokenRefreshError` |
+| Commit hashes | `4d08ee4` |
+| API, class and package names | `AbortController`, `requests` |
+| Branch, tag and issue references | `feat/cli-foundation`, `#42` |
+| Everything in `evidence[]` | it is a citation, not prose |
+
+Explaining a term in the resolved language is welcome; renaming the thing is not.
+Write `TokenRefreshError（更新憑證時拋出的例外）`, never `更新憑證錯誤`. A reader
+must be able to grep every identifier you name straight out of the worklog and
+land in the code.
+
+**The summary marker is mandatory in `generated_markdown`.** The day's one-line
+summary must be bracketed:
+
+```markdown
+## 當日摘要
+<!-- GIT_WORKLOG:SUMMARY:START -->
+新增會員搜尋快取並補充 API 測試。
+<!-- GIT_WORKLOG:SUMMARY:END -->
+
+參與者：Alice Chen
+```
+
+The index is built by scanning every day file, and days may be written in
+different languages. The markers say *where* the summary is without saying what
+language it is in. Without them the index falls back to looking for a literal
+`當日摘要` heading — which means a day written in any other language silently
+gets a blank index row: no error, no warning, just a missing summary. Exactly one
+line goes between the markers, and it is the summary itself — not the
+participants line, not a heading.
 
 ---
 
