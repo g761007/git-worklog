@@ -55,6 +55,13 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `doctor` and `validate` now check language settings for real, rather than
   reporting them as skipped.
 
+  `--interface-language` on the CLI keeps the tool's own messages separate from
+  the worklog's language (§6.2.13): `--language zh-TW --interface-language en` is
+  a supported combination, and neither drags the other along. Messages ship in
+  English only for now — the roadmap allows that — but asking for another
+  language gets `INTERFACE_LANGUAGE_NOT_SUPPORTED` rather than silence that looks
+  like it worked. JSON keys never translate; they are API.
+
 - **A summary marker in day files** (`<!-- GIT_WORKLOG:SUMMARY:START -->`).
   `index.md` used to find each day's summary by looking for the literal `當日摘要`
   heading, which meant a day written in any other language got a blank index row

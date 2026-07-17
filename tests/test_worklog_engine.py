@@ -319,6 +319,72 @@ class TestUpdateDaily(unittest.TestCase):
         self.assertEqual([f for f in os.listdir(day_dir) if f.startswith(".rw-")], [])
 
 
+class TestLanguageOnDisk(unittest.TestCase):
+    """§21.4: MANUAL survives a language switch; non-ASCII survives the round trip."""
+
+    def setUp(self):
+        self.work = tempfile.mkdtemp(prefix="rw_lod_")
+        self.dir = os.path.join(self.work, wm.WORKLOG_DIRNAME)
+
+    def tearDown(self):
+        rmtree(self.work)
+
+    def _write_day(self, date, generated):
+        run_script("update_daily_worklog.py", ["--dir", self.dir, "--apply"],
+                   stdin=day_entries({date: generated}))
+
+    def test_manual_region_is_untouched_when_the_generated_language_changes(self):
+        # §6.2.11: MANUAL is preserved verbatim, never translated or rewritten.
+        # The user's own words are theirs, whatever language the run is in.
+        self._write_day("2026-07-15",
+                        "## 當日摘要\n" + wm.render_summary("第一版摘要。"))
+        path = day_file(self.dir, "2026-07-15")
+        note = "我手寫的筆記：這天的 workaround 別移除，見 issue #42。\nAlice said: keep it.\n"
+        raw = read(path).replace(marker("2026-07-15", "MANUAL", "START") + "\n",
+                                 marker("2026-07-15", "MANUAL", "START") + "\n" + note)
+        write(path, raw)
+
+        self._write_day("2026-07-15",
+                        "## Daily summary\n" + wm.render_summary("Rewritten in English."))
+
+        day = wm.parse_day(read(path), "2026-07-15")
+        self.assertIn("我手寫的筆記：這天的 workaround 別移除，見 issue #42。", day.manual)
+        self.assertIn("Alice said: keep it.", day.manual)
+        self.assertIn("Rewritten in English.", day.generated)
+        self.assertNotIn("第一版摘要。", day.generated)
+
+    def test_non_ascii_content_round_trips_byte_for_byte(self):
+        # §21.4: UTF-8 write and read back. Every language this tool claims to
+        # support is non-ASCII except English, so a mangled encoding would be a
+        # silent corruption of the whole product.
+        samples = {
+            "2026-07-15": "重構了「權限判斷」流程，並補上邊界測試。",
+            "2026-07-16": "認証フローをリファクタリングし、境界テストを追加した。",
+            "2026-07-17": "인증 흐름을 리팩터링하고 경계 테스트를 추가했다.",
+            "2026-07-18": "Überprüfung der Token-Logik — jetzt läuft's.",
+        }
+        for date, text in samples.items():
+            self._write_day(date, f"## 摘要\n{wm.render_summary(text)}")
+
+        for date, text in samples.items():
+            day = wm.parse_day(read(day_file(self.dir, date)), date)
+            self.assertIn(text, day.generated)
+            self.assertEqual(wm.summarise_generated(day.generated), text)
+
+    def test_non_ascii_summaries_survive_into_the_index(self):
+        samples = {
+            "2026-07-16": "認証フローをリファクタリングした。",
+            "2026-07-17": "인증 흐름을 리팩터링했다.",
+        }
+        for date, text in samples.items():
+            self._write_day(date, f"## 摘要\n{wm.render_summary(text)}")
+        run_script("rebuild_worklog_index.py",
+                   ["--dir", self.dir, "--language", "ja", "--apply"], stdin="")
+        index = read(wm.index_path(self.dir))
+        for text in samples.values():
+            self.assertIn(text, index)
+
+
 class TestIndexLanguage(unittest.TestCase):
     """§6.2.12: the index picks a language once and then keeps it."""
 

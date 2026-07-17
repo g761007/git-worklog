@@ -40,6 +40,37 @@ def write(path: str, text: str) -> None:
     Path(path).write_text(text, encoding="utf-8")
 
 
+class TestInterfaceLanguage(unittest.TestCase):
+    """§6.2.13: the CLI's own messages are a separate setting from content."""
+
+    def test_defaults_to_english_quietly(self):
+        d, rc, err = run_cli("version")
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(d["interface_language"], "en")
+        self.assertNotIn("warnings", d)
+
+    def test_unsupported_language_is_answered_not_ignored(self):
+        # English-only messages are allowed for now (§6.2.13). Accepting the flag
+        # in silence would look like it worked.
+        d, rc, err = run_cli("--interface-language", "zh-TW", "version")
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(d["interface_language"], "en")
+        self.assertEqual([w["code"] for w in d["warnings"]],
+                         ["INTERFACE_LANGUAGE_NOT_SUPPORTED"])
+
+    def test_an_unusable_tag_fails_rather_than_falling_back(self):
+        d, rc, _ = run_cli("--interface-language", "nonsense", "version")
+        self.assertEqual(rc, 2)
+        self.assertFalse(d["ok"])
+        self.assertEqual(d["errors"][0]["code"], "LANGUAGE_INVALID")
+
+    def test_json_keys_do_not_change_with_the_interface_language(self):
+        # Keys are API. Translating them would break every caller (§6.2.13).
+        a, _, _ = run_cli("version")
+        b, _, _ = run_cli("--interface-language", "zh-TW", "version")
+        self.assertEqual(set(a), set(b) - {"warnings"})
+
+
 class TestVersion(unittest.TestCase):
     def test_reports_every_version_separately(self):
         d, rc, err = run_cli("version")
