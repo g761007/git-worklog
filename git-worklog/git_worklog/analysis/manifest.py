@@ -16,7 +16,9 @@ import os
 
 from git_worklog import config, language
 from git_worklog import markers as wm
-from git_worklog.analysis import SCHEMA_VERSION, AnalysisError  # noqa: F401
+from git_worklog.analysis import (  # noqa: F401
+    RESULTS_SUBDIR, SCHEMA_VERSION, TASKS_SUBDIR, AnalysisError,
+)
 
 # Number of changed files above which a day is flagged as "large" and the Day
 # Subagent is advised to fan out into Code Analysis Subagents.
@@ -284,6 +286,51 @@ def required_files(manifest: dict) -> "set[str]":
     """
     return {p["file"] for p in manifest.get("required_commit_file_pairs") or []
             if p.get("required")}
+
+
+def load_tasks(run_dir: str) -> dict:
+    """Read back what a run asked for, from the manifests it dispatched.
+
+    The tasks are the run's own record of its scope, which is why both `collect`
+    and `preview` read them rather than taking a caller-supplied date list: a day
+    could otherwise be dropped from a run simply by leaving it out of the second
+    command -- the exact failure `missing` exists to catch.
+    """
+    tasks_dir = os.path.join(run_dir, TASKS_SUBDIR)
+    if not os.path.isdir(tasks_dir):
+        raise AnalysisError(
+            "RUN_NOT_PREPARED",
+            f"{run_dir} has no {TASKS_SUBDIR}/ directory, so there is nothing to "
+            f"collect against. Was this run created by `analyze prepare`?",
+            run_dir=run_dir)
+
+    dates, resolved_language = [], None
+    required_by_date, manifests = {}, {}
+    for name in sorted(os.listdir(tasks_dir)):
+        if not name.endswith(".json"):
+            continue
+        with open(os.path.join(tasks_dir, name), "r", encoding="utf-8") as fh:
+            manifest = json.load(fh)
+        date = manifest["date"]
+        dates.append(date)
+        manifests[date] = manifest
+        required_by_date[date] = required_files(manifest)
+        block = manifest.get("language") or {}
+        if block.get("resolved"):
+            resolved_language = block["resolved"]
+    if not dates:
+        raise AnalysisError("RUN_HAS_NO_TASKS",
+                            f"{tasks_dir} contains no manifests.", run_dir=run_dir)
+
+    return {
+        "run_dir": run_dir,
+        "tasks_dir": tasks_dir,
+        "results_dir": os.path.join(run_dir, RESULTS_SUBDIR),
+        "dates": dates,
+        "language": resolved_language,
+        "required_by_date": required_by_date,
+        "manifests": manifests,
+    }
 
 
 def _repository_block(history: "dict | None") -> "dict | None":

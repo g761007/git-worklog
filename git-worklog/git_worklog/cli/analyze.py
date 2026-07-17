@@ -30,14 +30,13 @@ from datetime import date as date_cls, datetime, timedelta
 
 from git_worklog import language
 from git_worklog import markers as wm
-from git_worklog.analysis import SCHEMA_VERSION, AnalysisError
+from git_worklog.analysis import (
+    RESULTS_SUBDIR, SCHEMA_VERSION, TASKS_SUBDIR, AnalysisError,
+)
 from git_worklog.analysis import history as ah
 from git_worklog.analysis import manifest as am
 from git_worklog.analysis import results as ar
 from git_worklog.analysis import worktree as aw
-
-TASKS_SUBDIR = "tasks"
-RESULTS_SUBDIR = "results"
 
 
 def _day_bounds(date_str: str, tz) -> "tuple[datetime, datetime]":
@@ -172,36 +171,12 @@ def _run_dir_for(args) -> str:
 
 def _collect(args) -> "tuple[dict, int]":
     run_dir = _run_dir_for(args)
-    tasks_dir = os.path.join(run_dir, TASKS_SUBDIR)
-    results_dir = os.path.join(run_dir, RESULTS_SUBDIR)
-    if not os.path.isdir(tasks_dir):
-        raise AnalysisError(
-            "RUN_NOT_PREPARED",
-            f"{run_dir} has no {TASKS_SUBDIR}/ directory, so there is nothing to "
-            f"collect against. Was this run created by `analyze prepare`?",
-            run_dir=run_dir)
-
-    # The tasks decide what the run asked for. Trusting a caller-supplied date
-    # list instead would let a day be dropped from the run simply by leaving it
-    # out of the second command -- the exact failure `missing` exists to catch.
-    dates, expected_language = [], None
-    required_by_date = {}
-    for name in sorted(os.listdir(tasks_dir)):
-        if not name.endswith(".json"):
-            continue
-        with open(os.path.join(tasks_dir, name), "r", encoding="utf-8") as fh:
-            manifest = json.load(fh)
-        dates.append(manifest["date"])
-        required_by_date[manifest["date"]] = am.required_files(manifest)
-        block = manifest.get("language") or {}
-        if block.get("resolved"):
-            expected_language = block["resolved"]
-    if not dates:
-        raise AnalysisError("RUN_HAS_NO_TASKS",
-                            f"{tasks_dir} contains no manifests.", run_dir=run_dir)
+    tasks = am.load_tasks(run_dir)
+    dates, results_dir = tasks["dates"], tasks["results_dir"]
+    expected_language = tasks["language"]
 
     payload = ar.read_run(results_dir, dates, args.repo, expected_language,
-                          required_by_date)
+                          tasks["required_by_date"])
 
     # A result nobody asked for is not a bonus: it means the run directory holds
     # analysis of a day this run never dispatched, and merging it would put a
