@@ -67,12 +67,23 @@ def build_parser() -> argparse.ArgumentParser:
                             required=True)
 
     prep = asub.add_parser("prepare", help="Mint a run and write one manifest per day.")
-    prep.add_argument("--from", required=True, metavar="DATE",
-                      help="First day to analyse (YYYY-MM-DD, inclusive).")
-    prep.add_argument("--to", required=True, metavar="DATE",
-                      help="Last day to analyse (YYYY-MM-DD, inclusive).")
-    prep.add_argument("--timezone", required=True, metavar="TZ",
-                      help="IANA timezone deciding where each day starts.")
+    prep.add_argument("shortcut", nargs="?", metavar="SHORTCUT",
+                      help="Date shortcut: NNd (last N days, e.g. 7d) or a bare "
+                           "YYYY-MM-DD. Alternative to the flags below.")
+    prep.add_argument("--date", metavar="DATE", help="A single day (YYYY-MM-DD).")
+    prep.add_argument("--days", type=int, metavar="N",
+                      help="The last N calendar days, including today.")
+    prep.add_argument("--from", metavar="DATE",
+                      help="First day to analyse (YYYY-MM-DD, inclusive). Needs --to.")
+    prep.add_argument("--to", metavar="DATE",
+                      help="Last day to analyse (YYYY-MM-DD, inclusive). Needs --from.")
+    prep.add_argument("--timezone", metavar="TZ",
+                      help="IANA timezone deciding where each day starts. Detected "
+                           "from the environment when omitted; the run reports "
+                           "which zone it used and where that came from.")
+    prep.add_argument("--today", metavar="DATE",
+                      help="Override today's date (YYYY-MM-DD) for deterministic "
+                           "runs. Affects NNd/--days and where uncommitted work lands.")
     prep.add_argument("--repo", default=".", help="Repository to read (default: cwd).")
     prep.add_argument("--dir", help="Worklog directory, read for its config.json "
                                     f"language setting (default: ./{wm.WORKLOG_DIRNAME}).")
@@ -89,11 +100,25 @@ def build_parser() -> argparse.ArgumentParser:
                            "changes. They are attributed to today and to no other "
                            "day; if today is outside --from/--to they are left out "
                            "and the run says so.")
-    prep.add_argument("--provider", default="anthropic",
-                      help="Subagent provider key (anthropic / openai / google).")
+    prep.add_argument("--host", metavar="KEY",
+                      help="Detected agent host (anthropic / openai / google). "
+                           "Resolves the subagent model from the packaged config, "
+                           "honouring $GIT_WORKLOG_<HOST>_MODEL and --model. The "
+                           "host is never guessed: unknown or unconfigured is an "
+                           "error, not a fallback to the first provider.")
+    prep.add_argument("--model", default="",
+                      help="Explicit model id, the highest-precedence override. "
+                           "Needs --host.")
+    prep.add_argument("--escalate", action="store_true",
+                      help="Use the host's escalation_model_id. Opt-in only, after "
+                           "the user approves an escalation re-run. Needs --host.")
+    prep.add_argument("--provider", default=None,
+                      help="Subagent provider key, stated rather than resolved "
+                           "(default: anthropic). Use --host instead unless you "
+                           "already hold the model object.")
     prep.add_argument("--model-json", default="",
                       help="Structured model object (JSON: {display_name, "
-                           "model_id[, reasoning_effort]}).")
+                           "model_id[, reasoning_effort]}). Goes with --provider.")
     prep.add_argument("--language", default="auto",
                       help="Content language for the worklog as a BCP 47 tag "
                            "(zh-TW, en, ja), or 'auto' to fall through to project "
