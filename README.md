@@ -35,8 +35,8 @@ git-worklog/                  # the skill (this whole directory is the skill)
 │   ├── writer.py             # planning and transactionally writing day files + index.md
 │   ├── preview.py            # the immutable preview record, its state machine and apply lock
 │   ├── migrate.py            # one-time migration of a legacy worklog into .git-worklog/
-│   ├── analysis/             # the pipeline: history -> manifest -> results (+ worktree, refs, coverage)
-│   └── cli/                  # version / doctor / validate / analyze / preview / apply
+│   ├── analysis/             # the pipeline: history -> manifest -> results (+ worktree, refs, coverage, reconcile)
+│   └── cli/                  # version / doctor / validate / analyze / preview / apply / report
 ├── scripts/                  # thin command-line shells over the package (stdlib only)
 │   ├── resolve_provider_model.py    # resolve per-host provider/model (overrides, escalation, halt-and-ask)
 │   ├── resolve_date_range.py        # date/timezone parsing, day-span cap, per-day bounds
@@ -190,8 +190,8 @@ refuses and says which, rather than writing something close enough. Previews
 expire after 24 hours, apply exactly once, and take a per-worklog lock so two of
 them cannot interleave.
 
-More commands — reports, migration, cleanup — arrive as the CLI grows; today
-those live in the skill.
+More commands — cleanup, init — arrive as the CLI grows; today those live in the
+skill.
 
 ### Usage
 
@@ -239,8 +239,12 @@ treated as missing.)
 
 Version scopes are resolved by commit set, not by date: `v1.0.1` means
 `git log v1.0.0..v1.0.1`, because a day file can cover commits outside a release
-and a cherry-pick can land outside its dates. See
-`git-worklog/references/report-mode.md`.
+and a cherry-pick can land outside its dates. `git-worklog report --tag v1.0.1`
+settles that scope and then **reconciles** it against the day files, listing the
+commits they describe that belong to a different release — a release report is
+told what to leave out rather than asked to work it out. Report language is
+independent of the worklog's: zh-TW day files can produce an English release
+note. See `git-worklog/references/report-mode.md`.
 
 Already have a legacy single-file `docs/PROJECT_WORKLOG.md`? Migrate it once with
 `/git-worklog migrate` (or `python3 scripts/migrate_legacy_worklog.py`). It
@@ -285,6 +289,7 @@ python3 -m git_worklog --text doctor
 python3 -m git_worklog --text validate --dir /tmp/.git-worklog
 python3 -m git_worklog --text coverage 7d --repo /path/to/repo --timezone Asia/Taipei
 python3 -m git_worklog --text refs --repo /path/to/repo --list-tags
+python3 -m git_worklog --text report --tag v1.0.1 --repo /path/to/repo --language en
 python3 -m git_worklog --text reindex --dir /tmp/.git-worklog
 ```
 
@@ -400,8 +405,8 @@ subagent 分析，所有變更都先以 dry-run 預覽，**經你明確確認後
     - `writer.py`：規劃並以交易方式寫入日期檔與 `index.md`。
     - `preview.py`：不可變的 preview record、其狀態機與 apply 鎖。
     - `migrate.py`：一次性把舊版工作日誌遷移進 `.git-worklog/`。
-    - `analysis/`：分析流程（history → manifest → results，另有 worktree、refs、coverage）。
-    - `cli/`：`version`／`doctor`／`validate`／`analyze`／`preview`／`apply`。
+    - `analysis/`：分析流程（history → manifest → results，另有 worktree、refs、coverage、reconcile）。
+    - `cli/`：`version`／`doctor`／`validate`／`analyze`／`preview`／`apply`／`report`。
   - `references/`：skill 依需求載入的詳細規格（報告模式、互動流程、日期契約、
     程式碼分析規則、subagent 契約、工作日誌格式、模型設定）。
 - `docs/naming-conventions.md`：品牌、skill、CLI、package 與目錄的正式命名對照。
@@ -559,6 +564,9 @@ skill 會明講並詢問是否先補齊——**絕不默默降級成摘要 commi
 
 版本範圍以 **commit 集合**界定，不是日期：`v1.0.1` 指的是 `git log v1.0.0..v1.0.1`——
 因為某天的日誌可能涵蓋不屬於該版本的 commit，而 cherry-pick 的 commit 也可能落在日期區間外。
+`git-worklog report --tag v1.0.1` 會定出這個範圍，並拿它跟每日檔案**對帳**，列出日誌有寫、
+但其實屬於別的版本的 commit——版本報告是被「告知」該略過什麼，而不是被「要求」自己想通。
+報告語言與工作日誌的語言互相獨立：zh-TW 的日誌可以產出英文的 release note。
 詳見 `git-worklog/references/report-mode.md`。
 
 若專案已有舊的單檔 `docs/PROJECT_WORKLOG.md`，可用 `/git-worklog migrate`
@@ -617,6 +625,7 @@ python3 -m git_worklog --text doctor
 python3 -m git_worklog --text validate --dir /tmp/.git-worklog
 python3 -m git_worklog --text coverage 7d --repo /path/to/repo --timezone Asia/Taipei
 python3 -m git_worklog --text refs --repo /path/to/repo --list-tags
+python3 -m git_worklog --text report --tag v1.0.1 --repo /path/to/repo --language en
 ```
 
 `scripts/` 是同一套引擎的命令列薄殼，保留給曾經接過它們的腳本；那不是 skill 的

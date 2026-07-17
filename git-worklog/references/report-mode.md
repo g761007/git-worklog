@@ -27,34 +27,49 @@ gap and asks (§4).
 
 ---
 
-## 2. Scope: dates or refs
+## 2. One command settles the scope
 
-Every report resolves to one of two scopes. Choosing the wrong one is the most
-consequential mistake available here, so decide deliberately.
+Every report starts with `report`. It resolves the scope, checks coverage,
+reconciles a tag against the day files and resolves the output language in one
+call, and it writes nothing:
+
+```
+# Date scope — a period.
+python3 -m git_worklog report 7d --repo <root> --language <tag>
+python3 -m git_worklog report --from 2026-07-13 --to 2026-07-15 --repo <root>
+
+# Ref scope — a release.
+python3 -m git_worklog report --tag v1.0.1 --repo <root> --language <tag>
+```
+
+Pass **one** scope. Asking for both is refused (`ARG_CONFLICT`) rather than
+resolved by precedence, because the two answer different questions and guessing
+which one the user meant produces a confident answer to neither.
+
+Do not reach for `coverage` or `refs` here. They are the primitives `report`
+composes, and they exist for their own sake; using them directly for a report
+means doing the reconciliation below by hand, which is exactly what this command
+exists to stop.
 
 ### Date scope — the default
 
 The user names a period: 上一週, 這個月, 最近 30 天, 7/1 到 7/10.
 
-**Dates are authoritative.** Normalise to `from`/`to` (or `date`/`days`, or a
-`NNd` shortcut) and hand them straight to `coverage` (§3), which resolves them by
-the same date contract generation mode uses — but with report mode's own 90-day
-cap, because it reads day files rather than spawning a subagent per day. There is
-no separate date step to run.
+**Dates are authoritative.** Normalise to `--from`/`--to` (or `--date`/`--days`,
+or a `NNd` shortcut); `report` resolves them by the same date contract generation
+mode uses, with report mode's own 90-day cap (§3). There is no separate date step
+to run, and nothing to reconcile: the dates *are* the scope, so anything
+committed on them is in it by definition.
 
 ### Ref scope — versions and tags
 
 The user names a release: 「整理 v1.0.1 CHANGELOG」, 「上一版之後改了什麼」.
 
-**The commit set is authoritative, not the dates.**
-
-```
-python3 -m git_worklog refs --repo <root> --tag v1.0.1 --timezone <tz>
-```
-
-It returns `commits[]` (the authority), `prev_tag`, `commit_range`, `dates[]`
-(derived), `date_span`, and `first_release`. `--from-ref`/`--to-ref` set an
-explicit pair; `--list-tags` lists what exists.
+**The commit set is authoritative, not the dates.** `report --tag` returns
+`commits[]` (the authority), `scope.commit_range`, `scope.prev_tag`,
+`scope.date_span` and `scope.first_release`, plus the `reconciliation` block
+below. `--from-ref`/`--to-ref` set an explicit pair; `refs --list-tags` lists
+what exists.
 
 **Why the commit set has to win.** A version is bounded by commits; the worklog
 is indexed by calendar date. Converting a tag to a date span and reading those
@@ -66,25 +81,39 @@ day files is wrong in both directions at once:
 - **Under-inclusive** — a cherry-pick keeps its original author date, so it
   belongs to the range while sitting on a day outside the span.
 
-So: take `commits[]` as the scope, use `dates[]` only to locate day files worth
-reading, and **reconcile**. Day files carry each commit's short hash in their
-`相關 commits` bullets, so this is checkable, not aspirational:
+So: `commits[]` is the scope, `dates[]` only locates the day files worth reading,
+and the two are **reconciled** — by the command, not by you. Day files carry each
+commit's short hash, so `report --tag` checks them against the range and hands
+back a `reconciliation` block. Obey it literally:
 
-> Describe only work whose commits appear in `commits[]`. When a day file
-> describes work whose hashes are absent from the range, leave it out and say
-> nothing about it — it belongs to a different release.
+| field | meaning | what you do |
+|---|---|---|
+| `out_of_range[]` | The day files describe these, and they belong to a **different release**. | **Leave them out.** Say nothing about them. Each entry carries `cited_on`, so you can see which day file tempted you. |
+| `unbacked[]` | In this release, but **no day file describes them**. | Do not claim to have analysed them. List them as shipped-but-unanalysed, or backfill (§4). |
+| `backed[]` | In this release and described by a day file. | This is what the report is made of. |
+| `unresolved[]` | Cited by a day file, but names no commit in this repository. | Usually prose that happens to look like hex. If it does look like a hash, the day file is citing something fabricated or rebased away — say so, do not describe it. |
 
-Report `first_release: true` plainly. "Everything since the beginning of the
-project" is a very different answer from "changes since the last release", and
-the user should not have to infer which one they got.
+A non-empty `out_of_range[]` is **normal**, not an error — a day file describes
+everything committed that day, and a release is a slice through that. It is why
+the command exits `0` in that case. What is not acceptable is describing those
+commits anyway.
+
+`backed[] + unbacked[]` is always the whole range, and every citation in the day
+files lands in exactly one of `backed` / `out_of_range` / `unresolved`. Nothing
+is silently dropped, so a report that mentions work in none of these buckets is
+work you invented.
+
+Report `scope.first_release: true` plainly. "Everything since the beginning of
+the project" is a very different answer from "changes since the last release",
+and the user should not have to infer which one they got.
 
 ---
 
 ## 3. The 90-day reading cap
 
 Generation and backfill cap at 30 calendar days because each day costs a
-subagent. Report mode reads files already on disk and spawns nothing, so it reads
-up to **90 days** (`--max-days 90`).
+subagent. Report mode reads files already on disk and spawns nothing, so `report`
+reads up to **90 days** (`--max-days`, default 90).
 
 The cap still exists — 90 bounds how much day-file text is pulled into context,
 not cost. Over 90 days: say so, and ask the user to narrow, exactly as generation
@@ -96,22 +125,10 @@ A ref scope whose `date_span` exceeds 90 days is subject to the same limit.
 
 ## 4. Coverage, and the gap question
 
-Before writing a single line of report, establish what is actually backed by
-analysis:
-
-```
-# Date scope — give it the range; it resolves the days itself (90-day cap).
-python3 -m git_worklog coverage 7d --repo <root> --timezone <tz>
-python3 -m git_worklog coverage --from 2026-07-13 --to 2026-07-15 --repo <root>
-
-# Ref scope — a tag's days are a set with gaps, not a span, so list them.
-python3 -m git_worklog coverage --repo <root> \
-    --dates 2026-07-13,2026-07-15 --timezone <tz>
-```
-
-Use `--dates` with the `dates[]` that `refs` derived; use the range flags for a
-date scope. Exit `1` means at least one gap — the command ran and the answer to
-"can I report on this?" is no. Per date it returns a `status`:
+`report` establishes what is actually backed by analysis, in the same call that
+resolved the scope — a ref scope's days are a set with gaps rather than a span,
+and it already knows which. Exit `1` means at least one gap: the command ran and
+the answer to "can I report on this?" is no. Per date it returns a `status`:
 
 | status | meaning | action |
 |---|---|---|
@@ -178,28 +195,29 @@ Never present a message-derived paragraph in the same voice as an analysed one.
 
 ## 5. Producing the report
 
-The orchestrator reads the covered day files directly (`.git-worklog/days/<date>.md`
-— plain Markdown) and synthesises the answer itself. **Do not spawn a subagent
-for synthesis:** the day files are already digested analysis, so another agent
-only adds a layer of paraphrase and a chance to lose detail. The only subagents
-report mode ever causes are the backfill pipeline's.
+The orchestrator reads the day files `report` listed in `material[]` (plain
+Markdown) and synthesises the answer itself. **Do not spawn a subagent for
+synthesis:** the day files are already digested analysis, so another agent only
+adds a layer of paraphrase and a chance to lose detail. The only subagents report
+mode ever causes are the backfill pipeline's.
 
 Rules:
 
 - **Read the GENERATED region and the MANUAL region.** Human notes in MANUAL are
   often the most valuable part of a day.
-- **Write the report in the language of the request, not the language of the day
-  files** (roadmap §6.2.11). A report is not bound to what it reads: day files
-  are written in the language of the run that produced them, and this report is
-  written in the language you are being asked in. Reading `zh-TW` day files and
-  producing an English release note is correct, and needs no conversion of
-  anything on disk — you are writing new prose, not translating a file. A range
-  whose days are in more than one language is not a problem to resolve either;
-  it is normal, and the report is still written in one language: the requested
-  one.
-  Resolve it exactly as `SKILL.md` §2a does — what the user asked for wins,
-  otherwise the language of this conversation. The repository's language never
-  votes, and neither does the day files'.
+- **Obey the `reconciliation` block** (§2) for a ref scope. It is the answer to
+  "what may this release's report describe?", already computed — not a hint to
+  weigh against your reading of the day file.
+- **Write the report in `language.resolved`, not the language of the day files**
+  (roadmap §6.2.11). `report` already decided it: pass `--language` with what the
+  user asked for, or the language of this conversation when they did not say
+  (`--language-source` records which it was). A report is not bound to what it
+  reads — reading `zh-TW` day files and producing an English release note is
+  correct, and converts nothing on disk: you are writing new prose, not
+  translating a file. A range whose days are in more than one language is not a
+  problem to resolve either; it is normal, and the report is still written in one
+  language: the resolved one. The repository's language never votes, and neither
+  does the day files'.
 - **Never translate identifiers when quoting a day file.** File paths, code
   symbols, commit hashes, API names, branch and issue references and author
   names stay verbatim in any output language — a reader must be able to grep
@@ -227,7 +245,7 @@ asking for — none is a separate code path.
 | Scenario | Example | Scope | Notes |
 |---|---|---|---|
 | Period summary (weekly/monthly) | 「幫我整理上一週工作摘要」 | date | Lead with outcomes, not commits. |
-| Release CHANGELOG | 「整理 v1.0.1 CHANGELOG」 | ref | Reconcile against `commits[]` (§2). |
+| Release CHANGELOG | 「整理 v1.0.1 CHANGELOG」 | ref | Obey the `reconciliation` block (§2). |
 | Handoff | 「我要交接，整理最近一個月的重點與待辦」 | date | Lean on each day's `接手者快速閱讀`. |
 | Personal contribution | 「Daniel 上個月做了什麼」 | date + author | See the filter rule below. |
 | Feature history | 「會員搜尋這功能是怎麼演進的」 | date + files | Filter day files by the paths involved. |
@@ -256,9 +274,11 @@ The worklog **stores** every author, always — that rule is unchanged
 | Situation | Response |
 |---|---|
 | `dir_exists: false` | The project has no worklog yet. Offer to generate; do not report on nothing. |
+| `NO_SCOPE` | Neither a date nor a ref scope was given. Ask what period or release the user means. |
+| `ARG_CONFLICT` | Both scopes were given. Pick one with the user; do not choose for them. |
 | `NO_TAGS` | No tags to resolve a version against. Ask for an explicit date range. |
-| `UNKNOWN_TAG` | Report it with the `available_tags` list from the script. |
-| `first_release: true` | State that the range runs from the project's first commit. |
+| `UNKNOWN_TAG` | Report it with the `available_tags` list from `refs --list-tags`. |
+| `scope.first_release: true` | State that the range runs from the project's first commit. |
 | Range over 90 days | Report the span and ask the user to narrow. Never truncate silently. |
 | Over 30 gap dates | Backfill cannot run in one pass. Offer batches, or proceed marked-shallow. |
 | A day file has corrupt markers | Report it and skip that day; never guess a repair (`worklog-format.md` §8). |

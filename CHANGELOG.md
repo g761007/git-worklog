@@ -8,6 +8,39 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`report`, and a release report that is told what to leave out** (#8). Report
+  mode's entry point: one call resolves the scope (a date range, or a tag's
+  commit set), checks coverage, resolves the output language, and — for a tag —
+  **reconciles** the range against the day files.
+
+  That reconciliation is the point. A version is bounded by commits while the
+  worklog is indexed by date, so a day file describes everything committed that
+  day, including other releases' work. Until now "describe only work whose
+  commits appear in `commits[]`" was a sentence in `references/report-mode.md`
+  addressed to the model, with nothing checking it — and #19 established that the
+  model does not reliably keep that kind of promise. `report --tag` now returns
+  `out_of_range[]` (the day files describe these; they belong to another release
+  — leave them out), `unbacked[]` (in the release, but no day file describes
+  them: `covered` means the day has a file, not that the file mentions your
+  commit), and `unresolved[]`. Run against this repository's own history, it
+  found nine out-of-range citations and four unbacked commits in a single
+  release.
+
+  Hashes are found by scanning the GENERATED region for Git object names rather
+  than by parsing the `相關 commits` label, because that label is zh-TW: keying
+  off it would find nothing in an English day file and report a clean
+  reconciliation — a check that passes because it looked at nothing.
+
+  **Report language is independent of the worklog's** (roadmap §6.2.11):
+  `report --language en` over zh-TW day files is a supported, checked path.
+
+  Not built: the seven `report/` modules of roadmap §11. The report types differ
+  only in scope, an optional filter, and the question asked — which is why the
+  v0.4.0 design that shipped report mode made them prompt examples rather than
+  code paths. §3.2 reserved that namespace for the day they diverge; they have
+  not. There is likewise no `--out`: the prose is the agent's, so at the point
+  this command runs there is nothing to write.
+
 - **The skill calls the CLI, and only the CLI** (#7). Every `scripts/<name>.py`
   invocation is gone from `SKILL.md` and `references/`. Three steps became one:
   `analyze prepare` now takes what the user actually said (`7d`, `--days 7`,
