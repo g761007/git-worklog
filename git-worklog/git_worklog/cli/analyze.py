@@ -192,7 +192,7 @@ def _collect(args) -> "tuple[dict, int]":
     expected_language = tasks["language"]
 
     payload = ar.read_run(results_dir, dates, args.repo, expected_language,
-                          tasks["required_by_date"])
+                          tasks["required_by_date"], tasks["commits_by_date"])
 
     # A result nobody asked for is not a bonus: it means the run directory holds
     # analysis of a day this run never dispatched, and merging it would put a

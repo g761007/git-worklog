@@ -77,6 +77,21 @@ REQUIRED_EVIDENCE_KEYS = ["commit", "file"]
 # is checked token by token rather than as one string.
 _SYMBOL_TOKEN_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]{2,}")
 
+# A `code span` in the prose. The worklog is written from these fields, and
+# nothing checked them: evidence[] was validated while `implementation` was free
+# to invent `PreviewStore` and `read_config()`, and did (#19, #22). A check is
+# only worth the surface it measures, and this was the surface the reader sees.
+_CODE_SPAN_RE = re.compile(r"`([^`\n]+)`")
+
+# The work_item fields a reader actually reads. `files` and `commits` are paths
+# and hashes (coverage's job), and `evidence` gets the stronger commit+file check
+# above -- checking them here would only report the same fault twice.
+PROSE_KEYS = ["title", "summary", "behavior_change", "implementation", "impact",
+              "risks", "maintenance_notes", "follow_ups"]
+
+# Prose fields outside work_items, same reasoning.
+TOP_LEVEL_PROSE_KEYS = ["handoff_notes", "uncertainties"]
+
 
 def analysis_dir() -> str:
     """Where runs live. Resolved per call so ``GIT_WORKLOG_HOME`` stays live."""
@@ -131,6 +146,7 @@ class Tree:
         self.repo = repo
         self._files: dict = {}
         self._commits: dict = {}
+        self._greps: dict = {}
         self._shallow = None
 
     def _git(self, *args) -> "tuple[int, str]":
@@ -156,6 +172,54 @@ class Tree:
             code, out = self._git("show", f"{commit}:{path}")
             self._files[key] = out if code == 0 else None
         return self._files[key]
+
+    def names_anything(self, token: str, trees: "tuple[str, ...]") -> bool:
+        """Does ``token`` appear anywhere in these trees?
+
+        Prose has no ``file`` to check a symbol against the way evidence does --
+        "PreviewStore stores the payload" names no location -- so the question a
+        prose symbol can answer is the weaker one: does this identifier exist in
+        the project at all, on the day being described. That is enough to catch
+        the fabrication this exists for, because an invented name exists nowhere.
+
+        ``git grep`` over whole trees rather than the cached file contents:
+        prose legitimately refers to code the day did not change ("consistent
+        with `detect_timezone`"), and checking only the day's own files would
+        report those as invented.
+
+        ``-w`` matches whole words, so a fabricated ``Cache`` is not masked by a
+        real ``CacheLayer`` -- ``-F`` alone is a substring match, and that
+        substring is exactly how a plausible-but-wrong name hides. Every token
+        reaching here is a single identifier (a dotted ``Tree.file_at`` was split
+        upstream), and an underscore is a word character, so ``_verify`` still
+        will not match inside ``_verify_against_tree`` -- which is correct, since
+        that is a different name.
+        """
+        key = (token, trees)
+        if key not in self._greps:
+            code, _ = self._git("grep", "-qwFI", "--", token, *trees)
+            self._greps[key] = code == 0
+        return self._greps[key]
+
+    def day_trees(self, commits: "list[str]") -> "tuple[str, ...]":
+        """The trees a day's prose may name: its start state and its end state.
+
+        Both, not just the end: a day that *deletes* `parse_legacy` describes it
+        correctly, and it is gone from the final tree. Checking only the end
+        would call every removal a fabrication.
+
+        Middle states are not searched. A symbol created and deleted within the
+        same day is in neither tree and would be reported -- rare enough to
+        accept, and the run says which name it doubted, so a human can tell.
+        """
+        usable = [c for c in commits if c and self.has_commit(c)]
+        if not usable:
+            return ()
+        first, last = usable[0], usable[-1]
+        code, _ = self._git("rev-parse", "--verify", "--quiet", f"{first}^")
+        # A root commit has no parent: the day starts from nothing, so its end
+        # state is the whole of it.
+        return (f"{first}^", last) if code == 0 else (last,)
 
 
 def validate_evidence(entries, where: str, tree: "Tree | None" = None) -> "list[dict]":
@@ -261,6 +325,69 @@ def _verify_against_tree(e: dict, at: str, tree: Tree) -> "list[dict]":
                 "path": at, "commit": commit, "file": path,
                 "lines": lines, "file_lines": total,
             })
+    return issues
+
+
+def _prose_strings(obj, keys: "list[str]") -> "list[str]":
+    """The prose under ``keys``, flattened. A field may be a string or a list."""
+    out: "list[str]" = []
+    for k in keys:
+        v = obj.get(k)
+        if isinstance(v, str):
+            out.append(v)
+        elif isinstance(v, list):
+            out.extend(x for x in v if isinstance(x, str))
+    return out
+
+
+def cited_symbols(text: str) -> "list[str]":
+    """Identifier-shaped code spans in prose, in order, without duplicates.
+
+    Only spans that are *entirely* an identifier (optionally dotted, optionally
+    with a trailing call) are returned. A span is not a symbol when it holds a
+    path (`.git-worklog/days/`), a flag (`--language`), a tag (`zh-TW`), a date,
+    or a phrase -- all of which are legitimately backticked and none of which
+    Git's index would find. Being strict here is what keeps the check quiet
+    enough that its output means something.
+    """
+    seen, out = set(), []
+    for span in _CODE_SPAN_RE.findall(text):
+        name = span.strip()
+        if name.endswith("()"):
+            name = name[:-2]
+        if not name or not all(
+                _SYMBOL_TOKEN_RE.fullmatch(part) for part in name.split(".") if part):
+            continue
+        for token in _SYMBOL_TOKEN_RE.findall(name):
+            if token not in seen:
+                seen.add(token)
+                out.append(token)
+    return out
+
+
+def validate_prose(obj, keys: "list[str]", where: str, tree: "Tree | None",
+                   trees: "tuple[str, ...]") -> "list[dict]":
+    """Every symbol the prose names must exist in the day it describes.
+
+    The weaker half of the evidence check, and the one that guards what the
+    worklog is actually written from. It asks only "does this name exist here",
+    because prose names no file -- but every fabrication observed so far was a
+    plausible name for code that does not exist at all, which this catches.
+    """
+    if tree is None or not trees:
+        return []
+    issues: "list[dict]" = []
+    for text in _prose_strings(obj, keys):
+        for token in cited_symbols(text):
+            if not tree.names_anything(token, trees):
+                issues.append({
+                    "code": "PROSE_SYMBOL_NOT_FOUND",
+                    "message": f"{where} names `{token}`, which appears nowhere "
+                               f"in the project on this day. The worklog is "
+                               f"written from this prose, so cite what the code "
+                               f"is actually called.",
+                    "path": where, "symbol": token,
+                })
     return issues
 
 
@@ -372,7 +499,8 @@ def _validate_language(obj, expected: "str | None") -> "list[dict]":
 
 def validate(obj, date: str, expected_language: "str | None" = None,
              tree: "Tree | None" = None,
-             required: "set[str] | None" = None) -> "list[dict]":
+             required: "set[str] | None" = None,
+             commits: "list[str] | None" = None) -> "list[dict]":
     """Structural check against the §6 return schema. Returns issue dicts.
 
     ``required`` is the manifest's required file set. It is optional because a
@@ -380,11 +508,18 @@ def validate(obj, date: str, expected_language: "str | None" = None,
     is handed a run directory and nothing else, so it checks what it can and does
     not pretend to check coverage. `analyze collect` reads the manifests, so it
     can, and does.
+
+    ``commits`` is the day's commit list **from the manifest**, and bounds the
+    trees the prose check searches. Deliberately not ``obj["commits"]``: that is
+    written by the subagent being checked, and a check whose scope its subject
+    chooses is not a check.
     """
     issues: "list[dict]" = []
     if not isinstance(obj, dict):
         return [{"code": "RESULT_NOT_OBJECT",
                  "message": "The result file must contain a JSON object."}]
+
+    trees = tree.day_trees(commits) if (tree and commits) else ()
 
     issues.extend(_validate_language(obj, expected_language))
     issues.extend(validate_coverage(obj, required))
@@ -420,6 +555,8 @@ def validate(obj, date: str, expected_language: "str | None" = None,
         })
 
     issues.extend(validate_evidence(obj.get("evidence"), "evidence", tree))
+    issues.extend(validate_prose(obj, TOP_LEVEL_PROSE_KEYS, "handoff_notes/"
+                                 "uncertainties", tree, trees))
 
     work_items = obj.get("work_items")
     if work_items is not None and not isinstance(work_items, list):
@@ -445,16 +582,23 @@ def validate(obj, date: str, expected_language: "str | None" = None,
             issues.extend(
                 validate_evidence(item.get("evidence"),
                                   f"work_items[{idx}].evidence", tree))
+            issues.extend(
+                validate_prose(item, PROSE_KEYS, f"work_items[{idx}]",
+                               tree, trees))
     return issues
 
 
 def read_run(run_dir: str, dates: "list[str]", repo: str,
              expected_language: "str | None" = None,
-             required_by_date: "dict[str, set[str]] | None" = None) -> dict:
+             required_by_date: "dict[str, set[str]] | None" = None,
+             commits_by_date: "dict[str, list[str]] | None" = None) -> dict:
     """Read every dispatched day's result file and validate it.
 
     ``required_by_date`` maps a date to the source files its manifest requires
-    the analysis to account for. Omitted by callers that never saw a manifest.
+    the analysis to account for. ``commits_by_date`` maps a date to the commits
+    its manifest dispatched, which bound the prose check's search. Both are
+    omitted by callers that never saw a manifest, which then check what they can
+    rather than pretend.
     """
     if not os.path.isdir(run_dir):
         raise AnalysisError("RUN_DIR_MISSING",
@@ -495,7 +639,8 @@ def read_run(run_dir: str, dates: "list[str]", repo: str,
             continue
 
         issues = validate(obj, date, expected_language, tree,
-                          (required_by_date or {}).get(date))
+                          (required_by_date or {}).get(date),
+                          (commits_by_date or {}).get(date))
         if issues:
             invalid.append({"date": date, "path": path,
                             "code": issues[0]["code"],

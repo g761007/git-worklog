@@ -305,7 +305,7 @@ def load_tasks(run_dir: str) -> dict:
             run_dir=run_dir)
 
     dates, resolved_language = [], None
-    required_by_date, manifests = {}, {}
+    required_by_date, commits_by_date, manifests = {}, {}, {}
     for name in sorted(os.listdir(tasks_dir)):
         if not name.endswith(".json"):
             continue
@@ -315,6 +315,9 @@ def load_tasks(run_dir: str) -> dict:
         dates.append(date)
         manifests[date] = manifest
         required_by_date[date] = required_files(manifest)
+        commits_by_date[date] = [c.get("short_hash")
+                                 for c in manifest.get("commits") or []
+                                 if c.get("short_hash")]
         block = manifest.get("language") or {}
         if block.get("resolved"):
             resolved_language = block["resolved"]
@@ -329,6 +332,7 @@ def load_tasks(run_dir: str) -> dict:
         "dates": dates,
         "language": resolved_language,
         "required_by_date": required_by_date,
+        "commits_by_date": commits_by_date,
         "manifests": manifests,
     }
 

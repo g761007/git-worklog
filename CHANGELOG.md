@@ -8,6 +8,31 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **The prose is verified, not just `evidence[]`** (#19). The worklog is written
+  from `implementation`, `behavior_change`, `impact` and the other prose fields,
+  and nothing checked them: `analyze collect` validated every `evidence[]` entry
+  against the day's tree while a subagent was free to name `PreviewStore` and
+  `read_config()` in its prose, and a real run did exactly that while reporting
+  itself `confidence: verified`.
+
+  `collect` now extracts every `` `backtick` `` code span from the prose fields
+  and fails the day (`PROSE_SYMBOL_NOT_FOUND`) if the identifier appears nowhere
+  in the day's trees. The check is deliberately the weaker sibling of the
+  evidence check — prose names no file, so it can only ask "does the project have
+  this name on this day", not "does this file". That is enough for the observed
+  failure, every instance of which was a plausible name for code that does not
+  exist at all.
+
+  Three design points make it trustworthy rather than noisy. The search runs
+  over the day's **start and end trees**, so prose describing a *removed* symbol
+  is not flagged as invented. The commit scope comes from the **manifest, never
+  the result** — a subagent cannot narrow the trees its own prose is checked
+  against. And the match is **whole-word**: a fabricated `Cache` is not waved
+  through as a substring of a real `CacheLayer`, which is exactly how a
+  plausible-but-wrong name would otherwise hide. A span that is a path, flag,
+  language tag or date is not treated as a symbol, so the check stays silent
+  except on real identifiers.
+
 - **`report`, and a release report that is told what to leave out** (#8). Report
   mode's entry point: one call resolves the scope (a date range, or a tag's
   commit set), checks coverage, resolves the output language, and — for a tag —

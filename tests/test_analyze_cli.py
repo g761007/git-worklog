@@ -476,6 +476,54 @@ class TestCollect(_Run):
         self.assertTrue(c["partial_run"])
         self.assertEqual(rc, 1)
 
+    def test_fabricated_prose_symbol_fails_the_day_through_the_cli(self):
+        # #19: the worklog is written from the prose, and a real subagent named
+        # `PreviewStore` in `implementation` while its evidence[] passed clean.
+        # The check has to reach `collect`, and the day's commit scope has to
+        # come from the manifest, not the result -- a subagent cannot be trusted
+        # to define what its own prose is checked against.
+        d, _, _ = self.prepare()
+        obj = _result(_DATE)
+        obj["work_items"][0]["implementation"] = "stored via `PreviewStore`"
+        self.write_result(d["run_id"], _DATE, obj)
+        c, rc, _ = self.collect(d["run_id"])
+        codes = [i["code"] for i in c["invalid"][0]["issues"]]
+        self.assertIn("PROSE_SYMBOL_NOT_FOUND", codes)
+        self.assertTrue(c["partial_run"])
+        self.assertEqual(rc, 1)
+
+    def test_prose_scope_comes_from_the_manifest_not_the_result(self):
+        # The day's commit list decides which trees the prose is checked in. If
+        # that list came from the result, a subagent could disable the check on
+        # its own prose by lying about which commits the day had -- a check whose
+        # scope its subject chooses is not a check. Here the result claims a
+        # commit the repo does not have; if that governed, day_trees would be
+        # empty and the fabrication below would slip through. The manifest holds
+        # the real commit, so it does not.
+        d, _, _ = self.prepare()
+        obj = _result(_DATE, commits=["deadbee"])
+        obj["work_items"][0]["commits"] = ["deadbee"]
+        obj["work_items"][0]["implementation"] = "stored via `PreviewStore`"
+        self.write_result(d["run_id"], _DATE, obj)
+        c, rc, _ = self.collect(d["run_id"])
+        codes = [i["code"] for i in c["invalid"][0]["issues"]]
+        self.assertIn("PROSE_SYMBOL_NOT_FOUND", codes)
+        self.assertEqual(rc, 1)
+
+    def test_prose_naming_real_code_is_accepted(self):
+        # The check must not cost a clean day: `CacheLayer` is real at this
+        # commit, so prose citing it passes. Without this, the fabrication test
+        # above could pass simply by rejecting everything.
+        d, _, _ = self.prepare()
+        obj = _result(_DATE)
+        obj["work_items"][0]["implementation"] = "extends `CacheLayer` with a get path"
+        obj["work_items"][0]["summary"] = "the `helper` in `src/util.py` is untouched"
+        self.write_result(d["run_id"], _DATE, obj)
+        c, rc, _ = self.collect(d["run_id"])
+        self.assertEqual(c["complete"], [_DATE])
+        self.assertFalse(c["partial_run"])
+        self.assertEqual(rc, 0)
+
     def test_a_degraded_day_blocks_the_run(self):
         d, _, _ = self.prepare()
         self.write_result(d["run_id"], _DATE, _result(_DATE, status="partial"))
