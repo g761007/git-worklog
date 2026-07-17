@@ -380,26 +380,6 @@ Write `TokenRefreshError（更新憑證時拋出的例外）`, never `更新憑�
 must be able to grep every identifier you name straight out of the worklog and
 land in the code.
 
-**The summary marker is mandatory in `generated_markdown`.** The day's one-line
-summary must be bracketed:
-
-```markdown
-## 當日摘要
-<!-- GIT_WORKLOG:SUMMARY:START -->
-新增會員搜尋快取並補充 API 測試。
-<!-- GIT_WORKLOG:SUMMARY:END -->
-
-參與者：Alice Chen
-```
-
-The index is built by scanning every day file, and days may be written in
-different languages. The markers say *where* the summary is without saying what
-language it is in. Without them the index falls back to looking for a literal
-`當日摘要` heading — which means a day written in any other language silently
-gets a blank index row: no error, no warning, just a missing summary. Exactly one
-line goes between the markers, and it is the summary itself — not the
-participants line, not a heading.
-
 ---
 
 ## 7. Confidence
@@ -509,6 +489,7 @@ INPUTS
 - repository root:    [absolute path]
 - include_uncommitted:[true|false]   (uncommitted content belongs to TODAY only)
 - provider / model:   [anthropic|openai|google] / [model_id from the manifest's model.model_id]
+- output language:    [the manifest's language.resolved, e.g. zh-TW]
 - output path:        [paths[<date>] — where your JSON must be written]
 - analysis manifest (from build_analysis_manifest.py):
 [PASTE THE MANIFEST JSON HERE, or give its file path if large]
@@ -547,6 +528,16 @@ OUTPUT
   6 of the subagent contract). All keys present; empty arrays where nothing
   applies. A day with no work still writes a valid object with has_changes:false
   — never skip the write.
+- LANGUAGE. Copy the output language above into the "language" field verbatim,
+  and write EVERY field of prose in it — summary, title, behavior_change,
+  implementation, impact, risks, maintenance_notes, follow_ups, handoff_notes,
+  uncertainties. This is validated: a wrong or missing language fails the day and
+  blocks the whole run. The repository's own language does NOT decide this. The
+  commits, identifiers, comments and docs you are about to read may be entirely
+  English while the output language is zh-TW — that is the normal case, not a
+  conflict. Never translate file paths, code symbols, commit hashes, API names,
+  branch/issue references, or anything in evidence[]; explaining a term in the
+  output language is welcome, renaming it is not. Section 6b has the details.
 - Set status (complete|partial|failed), the day-level confidence
   (verified|inferred|unknown), and escalation_recommended + escalation_reasons[]
   honestly per section 7. escalation_recommended is a SUGGESTION only — never
