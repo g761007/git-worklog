@@ -456,5 +456,162 @@ class TestRefsCli(unittest.TestCase):
         self.assertEqual(d["errors"][0]["code"], "NO_REF_SPEC")
 
 
+class TestReportCli(unittest.TestCase):
+    """`report` — the one call that settles a report's scope, coverage and language.
+
+    The pieces it composes are held by the classes above and by
+    tests/test_reconcile.py. What is only true here is the composition: that a
+    report cannot be given two scopes, that the reconciliation reaches the caller
+    for a ref scope and is absent for a date scope, and that the report's
+    language owes nothing to the day files it reads.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.repo = make_tagged_repo()
+        wdir = os.path.join(cls.repo, wm.WORKLOG_DIRNAME)
+        os.makedirs(os.path.join(wdir, wm.DAYS_SUBDIR), exist_ok=True)
+        r, _, _ = run_cli("refs", "--repo", cls.repo, "--tag", "v1.0.1", *TPE)
+        cls.commits = {c["subject"]: c for c in r["commits"]}
+        v100, _, _ = run_cli("refs", "--repo", cls.repo, "--tag", "v1.0.0", *TPE)
+        cls.core = v100["commits"][0]
+        search = cls.commits["feat: add search"]["short_hash"]
+        fix = cls.commits["fix: search off-by-one"]["short_hash"]
+        # 2026-09-02's day file also cites v1.0.0's commit — the ordinary case
+        # this whole reconciliation exists for.
+        core = cls.core["short_hash"]
+        for date, body in (("2026-09-02",
+                            f"- {search} 新增搜尋\n- {core} v1.0.0 的工作"),
+                           ("2026-09-03", f"- {fix} 修正 off-by-one")):
+            with open(day_file(wdir, date), "w", encoding="utf-8") as fh:
+                fh.write(wm.render_new_day_file(date, body, timezone="Asia/Taipei"))
+
+    @classmethod
+    def tearDownClass(cls):
+        rmtree(cls.repo)
+
+    def test_a_report_cannot_have_two_scopes(self):
+        # A version is bounded by commits and the worklog is indexed by date;
+        # silently letting one win would answer a question nobody asked.
+        d, rc, _ = run_cli("report", "--repo", self.repo, "--tag", "v1.0.1",
+                           "--from", "2026-09-01", "--to", "2026-09-03", *TPE)
+        self.assertFalse(d["ok"])
+        self.assertEqual(rc, 2)
+        self.assertEqual(d["errors"][0]["code"], "ARG_CONFLICT")
+
+    def test_a_report_needs_a_scope(self):
+        d, rc, _ = run_cli("report", "--repo", self.repo, *TPE)
+        self.assertFalse(d["ok"])
+        self.assertEqual(rc, 2)
+        self.assertEqual(d["errors"][0]["code"], "NO_SCOPE")
+
+    def test_ref_scope_carries_the_commit_set_and_its_reconciliation(self):
+        d, rc, err = run_cli("report", "--repo", self.repo, "--tag", "v1.0.1", *TPE)
+        self.assertTrue(d["ok"], err)
+        self.assertEqual(rc, 0)
+        self.assertEqual(d["scope"]["kind"], "ref")
+        self.assertEqual(d["scope"]["commit_range"], "v1.0.0..v1.0.1")
+        self.assertEqual(d["commit_count"], 2)
+        self.assertEqual([c["short_hash"] for c in d["reconciliation"]["out_of_range"]],
+                         [self.core["short_hash"]])
+
+    def test_date_scope_has_no_reconciliation(self):
+        # Its dates *are* the authority, so there is no commit set to reconcile
+        # against — anything committed on those days is in scope by definition.
+        d, _, err = run_cli("report", "--repo", self.repo, "--from", "2026-09-02",
+                            "--to", "2026-09-03", *TPE)
+        self.assertTrue(d["ok"], err)
+        self.assertEqual(d["scope"]["kind"], "date")
+        self.assertNotIn("reconciliation", d)
+        self.assertNotIn("commits", d)
+
+    def test_material_lists_only_day_files_that_exist(self):
+        d, _, err = run_cli("report", "--repo", self.repo, "--tag", "v1.0.1", *TPE)
+        self.assertTrue(d["ok"], err)
+        self.assertEqual([m["date"] for m in d["material"]],
+                         ["2026-09-02", "2026-09-03"])
+        for m in d["material"]:
+            self.assertTrue(os.path.isfile(m["path"]))
+
+    def test_report_language_is_independent_of_the_day_files(self):
+        # §6.2.11: zh-TW worklogs must be able to produce an English release
+        # report. The day files here are zh-TW; the report is not.
+        d, _, err = run_cli("report", "--repo", self.repo, "--tag", "v1.0.1",
+                            "--language", "en", *TPE)
+        self.assertTrue(d["ok"], err)
+        self.assertEqual(d["language"]["resolved"], "en")
+        self.assertEqual(d["language"]["source"], "cli-argument")
+        # Still reconciles the same zh-TW material it always did.
+        self.assertEqual(d["reconciliation"]["backed_count"], 2)
+
+    def test_language_source_records_who_asked(self):
+        d, _, err = run_cli("report", "--repo", self.repo, "--tag", "v1.0.1",
+                            "--language", "ja", "--language-source", "user-request",
+                            *TPE)
+        self.assertTrue(d["ok"], err)
+        self.assertEqual(d["language"]["resolved"], "ja")
+        self.assertEqual(d["language"]["source"], "user-request")
+
+    def test_an_unusable_language_tag_is_refused(self):
+        d, rc, _ = run_cli("report", "--repo", self.repo, "--tag", "v1.0.1",
+                           "--language", "not a tag", *TPE)
+        self.assertFalse(d["ok"])
+        self.assertEqual(rc, 2)
+
+    def test_a_gap_exits_one(self):
+        # --to-ref main reaches the untagged 2026-09-05 commit, which has no
+        # day file: report mode's "can I answer from what is on disk?" is no.
+        d, rc, err = run_cli("report", "--repo", self.repo, "--from-ref", "v1.0.1",
+                             "--to-ref", "main", *TPE)
+        self.assertTrue(d["ok"], err)
+        self.assertEqual(d["gaps"], ["2026-09-05"])
+        self.assertEqual(rc, 1)
+
+    def test_out_of_range_alone_does_not_fail_the_run(self):
+        # The ordinary case: a day file describing another release's work is why
+        # the reconciliation exists, not a failure. Exiting 1 here would train
+        # the caller to ignore the code.
+        d, rc, err = run_cli("report", "--repo", self.repo, "--tag", "v1.0.1", *TPE)
+        self.assertTrue(d["ok"], err)
+        self.assertTrue(d["reconciliation"]["out_of_range"])
+        self.assertFalse(d["reconciliation"]["clean"])
+        self.assertEqual(rc, 0)
+
+    def test_unknown_tag_is_refused(self):
+        d, rc, _ = run_cli("report", "--repo", self.repo, "--tag", "v9.9.9", *TPE)
+        self.assertFalse(d["ok"])
+        self.assertEqual(rc, 2)
+        self.assertEqual(d["errors"][0]["code"], "UNKNOWN_TAG")
+
+    def test_an_empty_release_answers_in_the_ordinary_shape(self):
+        # A range containing no commits is real, and is not a gap. It has no
+        # dates to ask `coverage` about, so that answer is assembled by hand —
+        # and a caller must not be able to tell, or it would have to special-case
+        # the empty release. `timezone.source` in particular has to speak the
+        # same vocabulary here as everywhere else.
+        d, rc, err = run_cli("report", "--repo", self.repo, "--from-ref", "v1.0.1",
+                             "--to-ref", "v1.0.1", *TPE)
+        self.assertTrue(d["ok"], err)
+        self.assertEqual(rc, 0)
+        self.assertEqual(d["commit_count"], 0)
+        self.assertEqual(d["dates"], [])
+        self.assertTrue(d["fully_covered"])
+        self.assertEqual(d["material"], [])
+        self.assertEqual(d["reconciliation"]["backed"], [])
+        self.assertEqual(d["reconciliation"]["unbacked"], [])
+        self.assertEqual(d["timezone"], {"resolved": "Asia/Taipei",
+                                         "source": "explicit"})
+
+    def test_timezone_source_matches_the_coverage_path(self):
+        # The empty-release payload above is hand-built; this pins it to the
+        # vocabulary the real coverage path emits, so the two cannot drift.
+        empty, _, _ = run_cli("report", "--repo", self.repo, "--from-ref",
+                              "v1.0.1", "--to-ref", "v1.0.1", *TPE)
+        populated, _, _ = run_cli("report", "--repo", self.repo, "--tag",
+                                  "v1.0.1", *TPE)
+        self.assertEqual(empty["timezone"], populated["timezone"])
+        self.assertEqual(sorted(empty), sorted(populated))
+
+
 if __name__ == "__main__":
     unittest.main()

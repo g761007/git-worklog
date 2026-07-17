@@ -230,6 +230,53 @@ def build_parser() -> argparse.ArgumentParser:
                     default="committer",
                     help="Which date decides day attribution (default: committer).")
 
+    rp = sub.add_parser("report",
+                        help="Settle a report's scope, coverage and language "
+                             "before it is written (report mode).")
+    # The same two scopes as `coverage`, for the same reason, plus the ref flags
+    # of `refs`: this is the one call that needs both halves at once, because
+    # reconciling a tag's commits against the day files is impossible with
+    # either alone.
+    rp.add_argument("shortcut", nargs="?", metavar="SHORTCUT",
+                    help="Date shortcut: NNd or a bare YYYY-MM-DD.")
+    rp.add_argument("--date", metavar="DATE", help="A single day (YYYY-MM-DD).")
+    rp.add_argument("--days", type=int, metavar="N",
+                    help="The last N calendar days, including today.")
+    rp.add_argument("--from", metavar="DATE", help="Range start (inclusive).")
+    rp.add_argument("--to", metavar="DATE", help="Range end (inclusive).")
+    rp.add_argument("--tag", help="Report on a tag; its predecessor is found "
+                                  "automatically. The commit set is the scope, "
+                                  "not the dates it spans.")
+    rp.add_argument("--from-ref", help="Explicit range start, exclusive (any ref).")
+    rp.add_argument("--to-ref", help="Explicit range end, inclusive (any ref).")
+    rp.add_argument("--language", default="auto",
+                    help="Language to write the report in, as a BCP 47 tag. "
+                         "Independent of the language the day files are written "
+                         "in: zh-TW worklogs can produce an English release "
+                         "report (default: auto).")
+    rp.add_argument("--language-source", default=None,
+                    help="Where --language came from, so the payload records "
+                         "whether a user asked or a default applied.")
+    rp.add_argument("--today", metavar="DATE",
+                    help="Override today's date for deterministic runs.")
+    rp.add_argument("--max-days", type=int, default=None,
+                    help="Maximum span in calendar days (default: 90), as "
+                         "`coverage`. Date scope only.")
+    rp.add_argument("--repo", default=".", help="Repository to read (default: cwd).")
+    rp.add_argument("--dir", default=wm.WORKLOG_DIRNAME,
+                    help="Worklog directory, absolute or relative to the repo "
+                         f"root (default: {wm.WORKLOG_DIRNAME}).")
+    rp.add_argument("--timezone", default=None,
+                    help="IANA timezone deciding each day's bounds. Detected "
+                         "from the environment when omitted; for a ref scope it "
+                         "defaults to UTC.")
+    rp.add_argument("--date-field", choices=["committer", "author"],
+                    default="committer",
+                    help="Which date decides day attribution (default: committer).")
+    rp.add_argument("--worklog-dir", default=None,
+                    help="Repo-relative worklog path whose commits count as "
+                         "self-referential and are excluded from the counts.")
+
     mg = sub.add_parser("migrate",
                         help="Move a legacy worklog into .git-worklog/ (dry-run "
                              "by default).")
@@ -287,6 +334,8 @@ def main(argv: "list[str] | None" = None) -> int:
         from git_worklog.cli import coverage as cmd
     elif args.command == "refs":
         from git_worklog.cli import refs as cmd
+    elif args.command == "report":
+        from git_worklog.cli import report as cmd
     elif args.command == "migrate":
         from git_worklog.cli import migrate as cmd
     elif args.command == "reindex":

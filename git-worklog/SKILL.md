@@ -187,8 +187,9 @@ than accepting it** (§6.2.14) — unless English is genuinely right.
 
 **Reports may differ from the worklog.** Day files are written in the language
 of the run that produced them; a report is written in the language of the
-request that asks for it (§6.2.11). Reading zh-TW day files and producing an
-English release note is correct and needs no conversion of anything on disk.
+request that asks for it (§6.2.11) — pass it to `report --language`, resolved the
+same way as §2a. Reading zh-TW day files and producing an English release note is
+correct and needs no conversion of anything on disk.
 
 **Never translate**: file paths, code symbols, commit hashes, API/class/package
 names, branch and issue references, or anything in `evidence[]`. Explaining a
@@ -530,8 +531,9 @@ is the whole surface you need; there is nothing in `scripts/` that is not here.
 | `analyze collect` | Read the run's results back and check them: schema, language, evidence accuracy, coverage, missing/unknown days |
 | `preview` | Freeze the apply: store every target file's final text, the fingerprints, the language and a TTL. Returns a `preview_id`. Writes nothing |
 | `apply` | Write that stored payload after re-checking the world. Takes a `preview_id` and nothing else |
-| `coverage` | Report mode: per-date `covered` / `gap` / `no-commits`. Exit `1` means a gap — real work nothing has analysed |
-| `refs` | Report mode: resolve a tag/ref to its authoritative commit set + derived dates |
+| `report` | Report mode's entry point: resolve the scope (dates or a tag's commit set), check coverage, reconcile the tag against the day files, resolve the output language. Writes nothing — the prose is yours |
+| `coverage` | Per-date `covered` / `gap` / `no-commits`. Exit `1` means a gap — real work nothing has analysed. A primitive `report` composes |
+| `refs` | Resolve a tag/ref to its authoritative commit set + derived dates. A primitive `report` composes; `--list-tags` lists what exists |
 | `migrate` | One-time migration of a legacy worklog (flat `PROJECT_WORKLOG/`, or the single `docs/PROJECT_WORKLOG.md`) into `.git-worklog/`. Dry-run unless `--apply` |
 | `reindex` | Rebuild `index.md` from the day files. Normal runs never need it — `apply` does it — but it is the repair for `INDEX_WRITE_FAILED` |
 | `doctor` | Is this environment able to run the tool? |
