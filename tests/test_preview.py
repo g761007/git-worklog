@@ -169,6 +169,25 @@ class TestPreviewIsTheArtifact(_Base):
         self.assertTrue(rec["payload"]["index"]["content"])
         self.assertEqual(rec["state"], "previewed")
 
+    def test_two_previews_of_different_content_get_different_ids(self):
+        # An escalation re-run, or any second attempt at a day, must not land on
+        # the first preview's id: overwriting a record in place would take an
+        # applied one's "applied" with it.
+        a, _, _ = self.preview()
+        b, _, _ = self.preview(entries={
+            _DATE: {"generated_markdown": _GENERATED + "\n改寫後的內容。\n"}})
+        self.assertNotEqual(a["preview_id"], b["preview_id"])
+        self.assertTrue(os.path.isfile(
+            os.path.join(self.home, "previews", f"{a['preview_id']}.json")))
+
+    @unittest.skipUnless(os.name == "posix", "POSIX permissions only")
+    def test_the_record_is_owner_only(self):
+        # §5.1: a preview holds the day's prose, which quotes a private
+        # repository's code back at whoever can read the file.
+        d, _, _ = self.preview()
+        path = os.path.join(self.home, "previews", f"{d['preview_id']}.json")
+        self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+
     def test_preview_writes_nothing(self):
         d, _, err = self.preview()
         self.assertTrue(d["ok"], err)
@@ -297,6 +316,24 @@ class TestStaleness(_Base):
                   encoding="utf-8") as fh:
             fh.write("# Project Worklog — 2026-07-01\n")
         self._assert_stale(d["preview_id"], "worklog directory listing")
+
+    def test_an_edited_index_makes_it_stale(self):
+        # index.md carries a human MANUAL region. Writing a payload built before
+        # someone edited it would rebuild the table against a file that has since
+        # moved on.
+        os.makedirs(self.wdir)
+        with open(os.path.join(self.wdir, "index.md"), "w", encoding="utf-8") as fh:
+            fh.write("# Project Worklog\n\n"
+                     "<!-- GIT_WORKLOG:INDEX:GENERATED:START -->\n"
+                     "| 日期 | 摘要 |\n|---|---|\n"
+                     "<!-- GIT_WORKLOG:INDEX:GENERATED:END -->\n\n"
+                     "<!-- GIT_WORKLOG:INDEX:MANUAL:START -->\n\n"
+                     "<!-- GIT_WORKLOG:INDEX:MANUAL:END -->\n")
+        d, _, err = self.preview()
+        self.assertTrue(d["ok"], err)
+        with open(os.path.join(self.wdir, "index.md"), "a", encoding="utf-8") as fh:
+            fh.write("\nappended after the preview\n")
+        self._assert_stale(d["preview_id"], "index.md content")
 
     def test_an_edited_analysis_result_makes_it_stale(self):
         d, _, _ = self.preview()
