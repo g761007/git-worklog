@@ -515,6 +515,17 @@ A conclusion with no evidence is not `verified`. If evidence cannot be gathered
 (unreadable file, missing submodule, permission error), lower the confidence and
 explain it in `uncertainties[]` — do not pretend the analysis was completed.
 
+**The prose is checked too, not only `evidence[]`.** A code symbol you write in
+`` `backticks` `` inside `summary`, `implementation`, `behavior_change`, `impact`,
+`risks`, `maintenance_notes`, `follow_ups`, `handoff_notes` or `uncertainties`
+must exist somewhere in the day's own trees — `analyze collect` searches for it
+and fails the day (`PROSE_SYMBOL_NOT_FOUND`) if it does not. The worklog is
+written from these fields, so a name invented here is a fabrication in the
+product, not a stray note. This catches exactly the failure a self-report cannot:
+a run that returned `confidence: verified` while its prose named `PreviewStore`
+and `read_config()`, neither of which the project contained. Backtick only names
+you have read. If you mean a name loosely, write it as plain words, not as code.
+
 ---
 
 ## 9. Day Subagent — PROMPT TEMPLATE
@@ -621,6 +632,15 @@ OUTPUT
   actually called `parse_legacy`, or `preview_dir` for `previews_dir`, reads
   perfectly and is a fabrication (#15). Read the name, then cite it. A file that
   exists in the checkout may not have existed at the commit you are citing.
+- The PROSE is checked too, not just evidence[]. Any code symbol you put in
+  `backticks` inside summary, implementation, behavior_change, impact, risks,
+  maintenance_notes, follow_ups, handoff_notes or uncertainties must exist in the
+  day's own trees, or the day fails (PROSE_SYMBOL_NOT_FOUND). The worklog is
+  written from this prose, so `PreviewStore` or `read_config()` invented here is a
+  fabrication in the product — a real run shipped both while reporting itself
+  verified. Backtick only names you have read; if you mean one loosely, write
+  plain words. A name you are describing as removed still counts as read — it is
+  in the day's starting tree.
 - A DELETION CANNOT BE CITED. The file is gone from the tree of the commit that
   deleted it, so {"commit": <the deleting commit>, "file": <the deleted file>}
   can never resolve. To evidence what the file was, cite it at a commit where it
