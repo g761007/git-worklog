@@ -6,6 +6,11 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-07-18
+
+The first public release since 0.4.0. Everything below landed across the internal
+v0.5–v0.9 milestones — the v1.0 refactor — and ships together here.
+
 ### Added
 
 - **`prepare` sizes the day and asks before dispatch** (#22). `large_day` had
@@ -750,6 +755,8 @@ satisfied.
 - A stdlib-only `unittest` suite and GitHub Actions CI on Python 3.9 / 3.12 / 3.13,
   with a `skill.zip` release artifact.
 
+[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/g761007/git-worklog/compare/v0.4.0...v1.0.0
 [0.4.0]: https://github.com/g761007/git-worklog/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/g761007/git-worklog/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/g761007/git-worklog/compare/v0.2.0...v0.3.0
