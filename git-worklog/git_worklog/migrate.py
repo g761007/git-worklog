@@ -28,9 +28,9 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-import tempfile
 
 from git_worklog import markers as wm
+from git_worklog import writer
 
 DEFAULT_LEGACY = os.path.join("docs", "PROJECT_WORKLOG.md")
 DEFAULT_LEGACY_DIR = wm.LEGACY_WORKLOG_DIRNAME
@@ -106,23 +106,6 @@ def parse_legacy(text: str) -> "dict[str, dict[str, str]]":
             "manual": "".join(lines[ms + 1:me]),
         }
     return result
-
-
-def _atomic_write(target: str, content: str, validate) -> None:
-    target_dir = os.path.dirname(os.path.abspath(target))
-    os.makedirs(target_dir, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=target_dir, prefix=".rw-mig-", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(content)
-            fh.flush()
-            os.fsync(fh.fileno())
-        with open(tmp, "r", encoding="utf-8") as fh:
-            validate(fh.read())
-        os.replace(tmp, target)
-    finally:
-        if os.path.exists(tmp):
-            os.unlink(tmp)
 
 
 def _read_utf8(path: str, what: str) -> str:
@@ -297,10 +280,13 @@ def run(from_dir: "str | None" = None, from_file: "str | None" = None,
     created: "list[str]" = []
     try:
         for path, content in to_write:
-            _atomic_write(path, content,
-                          lambda t, d=os.path.basename(path)[:-3]: wm.parse_day(t, d))
+            writer.atomic_write(
+                path, content,
+                lambda t, d=os.path.basename(path)[:-3]: wm.parse_day(t, d),
+                prefix=".rw-mig-")
             created.append(path)
-        _atomic_write(index_path, index_content, wm.parse_index)
+        writer.atomic_write(index_path, index_content, wm.parse_index,
+                            prefix=".rw-mig-")
         created.extend(wm.ensure_data_dir(worklog_dir, timezone))
     except Exception as exc:
         for path in created:
