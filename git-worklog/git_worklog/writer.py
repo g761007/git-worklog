@@ -383,19 +383,38 @@ def plan_index(worklog_dir: str, overrides: "dict | None" = None,
     }
 
 
-def apply_index(target: str, content: str) -> None:
-    """Write index.md atomically, re-parsing the staged text before it goes live."""
+def atomic_write(target: str, content: str, validate, *, prefix: str) -> None:
+    """Write ``content`` to ``target`` atomically, validating before it goes live.
+
+    Stage into a temp file beside the target, fsync it, re-read and hand the
+    staged bytes to ``validate`` (which raises to reject them), then
+    :func:`os.replace` into place -- so a reader never sees a half-written or
+    invalid file, and a crash leaves the target untouched.
+
+    ``prefix`` names the temp file. It is not cosmetic: a crash between fsync and
+    replace leaves an orphan, and the prefix (``.rw-index-`` vs ``.rw-mig-``) is
+    what tells you which writer left it. The single-file dance was implemented
+    three times (#23); this is the one copy, with ``apply_index`` and migration
+    as callers. ``apply_days`` stays separate -- its multi-file stage-all /
+    swap-all / roll-back-all transaction is a different algorithm, not this one
+    in a loop.
+    """
     target_dir = os.path.dirname(os.path.abspath(target))
     os.makedirs(target_dir, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=target_dir, prefix=".rw-index-", suffix=".tmp")
+    fd, tmp = tempfile.mkstemp(dir=target_dir, prefix=prefix, suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(content)
             fh.flush()
             os.fsync(fh.fileno())
         with open(tmp, "r", encoding="utf-8") as fh:
-            wm.parse_index(fh.read())
+            validate(fh.read())
         os.replace(tmp, target)
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)
+
+
+def apply_index(target: str, content: str) -> None:
+    """Write index.md atomically, re-parsing the staged text before it goes live."""
+    atomic_write(target, content, wm.parse_index, prefix=".rw-index-")

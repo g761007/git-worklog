@@ -515,6 +515,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   so a working-tree git failure now surfaces as `GIT_ERROR` rather than
   `UNEXPECTED_ERROR`.
 
+- **One atomic single-file write** (#23). The mkstemp → fsync → validate →
+  `os.replace` dance lived in three places; `writer.apply_index` and
+  `migrate`'s own copy are now one `writer.atomic_write(target, content,
+  validate, *, prefix)`. The temp-file prefix stays a parameter (`.rw-index-` /
+  `.rw-mig-`) because it identifies which writer left an orphan after a crash.
+  `apply_days`'s multi-file rollback transaction stays separate — a different
+  algorithm, not this one looped. Behaviour-preserving: no test changed.
+
 ## [0.4.0] - 2026-07-16
 
 ### Added
