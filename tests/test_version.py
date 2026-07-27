@@ -57,10 +57,10 @@ class TestOneSourceOfTruth(unittest.TestCase):
             "agents/openai.yaml version has drifted from git_worklog.__version__ "
             "— bump both, or the packaged skill and the installed CLI disagree.")
 
-    def test_this_release_is_one_point_zero(self):
+    def test_this_release_is_one_point_one(self):
         # Pins the actual ship. When the next release bumps __version__, this and
         # the YAML move together or the suite goes red — which is the reminder.
-        self.assertEqual(__version__, "1.0.0")
+        self.assertEqual(__version__, "1.1.0")
 
 
 class TestDataVersionsStayIndependent(unittest.TestCase):
@@ -75,8 +75,9 @@ class TestDataVersionsStayIndependent(unittest.TestCase):
         self.assertEqual(LAYOUT_VERSION, 1)
 
     def test_a_product_bump_leaves_the_layout_version_at_one(self):
-        # The release is 1.0.0; the layout is still 1. This pins that the ship
-        # did not sweep the data version along with it. It moves only when
+        # The release is 1.1.0; the layout is still 1. This pins that the ship
+        # did not sweep the data version along with it — 1.1.0 changed how the
+        # skill is invoked and nothing about what is on disk. It moves only when
         # markers.LAYOUT_VERSION is deliberately bumped for a migration, at which
         # point this test is updated in that same change — on purpose.
         self.assertNotEqual(str(LAYOUT_VERSION), __version__)
