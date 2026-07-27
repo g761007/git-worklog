@@ -1,17 +1,8 @@
 ---
 name: git-worklog
-description: >-
-  Analyze this Git repository's actual code changes day by day, maintain a
-  human-readable project worklog under .git-worklog/ (one file per day plus an
-  index.md), and answer questions from it. Use when the user runs /git-worklog,
-  or asks to 整理/產生/補 工作日誌, build a per-day work log, summarize what actually
-  changed in the repo over a date range, or document daily commits for handoff —
-  and also to report from that history: 整理上一週工作摘要, draft a release
-  CHANGELOG for a tag or version, summarize a period for a status update or
-  handoff, ask what a named person worked on, or collect outstanding tech debt
-  and follow-ups. Reads real diffs and code — never just commit messages.
-  Reporting is read-only; writing always previews (dry-run) first and only
-  happens after explicit confirmation.
+description: Per-day project worklog from real Git diffs, and reports built from it.
+disable-model-invocation: true
+argument-hint: "a range (today, 7d, 2026-07-01), a question, or nothing for the menu"
 ---
 
 # Git Worklog
@@ -66,37 +57,49 @@ a preview, or anything you can apply.
 
 ## 1. Trigger & no-argument menu
 
-Triggered by `/git-worklog` or natural-language worklog requests.
+**The user invokes this skill; you never invoke it yourself.** The frontmatter
+carries `disable-model-invocation: true`, so the only way in is the user typing
+`/git-worklog`. When they do, they decide *when* it runs and *over what range* —
+that is the point, not a limitation to route around.
 
 When invoked with **no usable arguments**, print this menu verbatim and wait —
 do nothing else:
 
 ```
-請選擇要整理的專案工作日誌範圍：
+Choose what to do:
 
-1. 今天
-2. 指定日期
-3. 最近 7 天
-4. 最近 30 天
-5. 自訂日期範圍
-6. 今天，並包含尚未提交的異動
-7. 自訂日期或範圍，並包含尚未提交的異動
+[Generate worklog] writes to .git-worklog/ — always previews first
+ 1. Today
+ 2. A specific date
+ 3. Last 7 days
+ 4. Last 30 days
+ 5. A custom date range
+ 6. Today, including uncommitted changes
+ 7. A custom date or range, including uncommitted changes
 
-日期範圍最多為 30 天。
-所有操作都會先顯示 dry-run 預覽，不會直接修改專案檔案。
+[Report from the existing worklog] read-only — nothing is modified
+ 8. Work summary for a period
+ 9. CHANGELOG for a version or tag
+10. What a specific person worked on
+11. Outstanding tech debt and follow-ups
 
-你可以直接輸入選項編號，或用自然語言回答，例如：
-- 整理今天
-- 整理 2026-07-01
-- 整理最近 7 天
-- 整理 2026-07-01 到 2026-07-10
-- 整理今天並包含未提交異動
-- 整理近 30 天
+Limits: generate up to 30 days, report up to 90 days.
+Reply with an option number, or just describe what you want in any language.
 ```
 
+**The menu is interface text and is English on purpose.** The worklog itself is
+not: content language follows §2a, so an English menu routinely produces a
+zh-TW worklog. Print it as written rather than translating it — the wording is
+pinned by a test against `agents/openai.yaml`, and paraphrasing it hands the
+first thing the user sees back to model judgement, which is what this skill is
+moving away from.
+
+Options `1`–`7` go to §2 onward; `8`–`11` go to `references/report-mode.md`.
 Option numbers map to: `1`→today, `2`→ask for a date, `3`→`days=7`,
 `4`→`days=30`, `5`→ask for a from/to range, `6`→today + `include_uncommitted`,
-`7`→ask for a date/range + `include_uncommitted`.
+`7`→ask for a date/range + `include_uncommitted`, `8`→ask for a period,
+`9`→ask for a version/tag, `10`→**ask who** (never infer it), `11`→ask for a
+period, defaulting to the whole worklog.
 
 Full menu, option, and confirmation handling: `references/interaction-flow.md`.
 
@@ -121,9 +124,11 @@ has no dry-run or confirmation gate. Its one writing path is backfilling a gap,
 which hands back to §§2–6 for just those dates, dry-run and confirmation
 included.
 
-**The menu is generate-only.** Report mode is reached by natural language or
-explicit parameters, never by an option number — the menu asks "which range to
-build", which is not the question report mode answers.
+**The menu covers both modes.** Options `1`–`7` are generate, `8`–`11` are
+report; either mode is also reachable by natural language or explicit parameters
+*after* the user has invoked the skill. The menu groups the two under headings
+that name the consequence — one writes files, the other does not — because that
+is the distinction a user needs before picking, not after.
 
 ---
 

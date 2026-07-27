@@ -18,7 +18,12 @@ PATH.
 #
 # Held at 0.4.0 through the internal v0.5-v0.9 milestones, then moved here to
 # 1.0.0 for the first public release since v0.4.0. See issue #12.
-__version__ = "1.0.0"
+#
+# 1.1.0 is a minor bump on a deliberately loose reading: no command, flag or JSON
+# field changed, but the skill stopped answering natural language without
+# /git-worklog and its menu switched to English. That is not an API break, and it
+# is not invisible either -- hence the prominent Changed entry in the CHANGELOG.
+__version__ = "1.1.0"
 
 # On-disk layout version of `.git-worklog/`, re-exported for convenience. It
 # describes the *data*, not the tool, and bumps only when a migration is needed.

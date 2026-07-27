@@ -12,42 +12,25 @@ failure. Date normalisation detail lives in `references/date-parameter-contract.
 
 **Scope: this file is generation mode.** A request for an *answer* from the
 history rather than for worklog files — 「整理上一週工作摘要」, 「整理 v1.0.1
-CHANGELOG」 — is report mode: it is read-only, has no menu, no dry-run and no
+CHANGELOG」 — is report mode: it is read-only, has no dry-run and no
 `preview_id`, and is specified in `references/report-mode.md`. Route first
-(`SKILL.md` §1a). The only place the two meet is §10 below, where report mode
-hands a gap back here to be filled.
+(`SKILL.md` §1a). The menu is shared — options `8`–`11` are report — so §1 and
+§2 below cover both modes; everything from §5 onward is generation only. The
+other place the two meet is §10, where report mode hands a gap back here to be
+filled.
 
 ---
 
 ## 1. No-argument menu (hard stop)
 
-When `/git-worklog` is invoked with **no usable arguments**, print this menu
+When `/git-worklog` is invoked with **no usable arguments**, print the menu
 **verbatim** and wait. Do nothing else.
 
-```
-請選擇要整理的專案工作日誌範圍：
-
-1. 今天
-2. 指定日期
-3. 最近 7 天
-4. 最近 30 天
-5. 自訂日期範圍
-6. 今天，並包含尚未提交的異動
-7. 自訂日期或範圍，並包含尚未提交的異動
-
-日期範圍最多為 30 天。
-
-所有操作都會先顯示 dry-run 預覽，不會直接修改專案檔案。
-
-你可以直接輸入選項編號，或用自然語言回答，例如：
-
-- 整理今天
-- 整理 2026-07-01
-- 整理最近 7 天
-- 整理 2026-07-01 到 2026-07-10
-- 整理今天並包含未提交異動
-- 整理近 30 天
-```
+**The menu text lives in `SKILL.md` §1 and only there.** It is not repeated here:
+it used to be, and the two copies drifted — same options, different blank lines —
+which is exactly the failure a second copy exists to cause. The one other copy is
+`agents/openai.yaml`'s `default_prompt`, which cannot be a cross-reference
+because a host reads it as data; a test pins the two together.
 
 With no arguments the skill **only prints the menu and waits**. It must NOT, at
 this point:
@@ -58,7 +41,7 @@ this point:
 - generate a worklog preview,
 - create or modify any file.
 
-Analysis begins only after the user picks a range (option number, natural
+Analysis begins only after the user picks an option (option number, natural
 language, or direct parameters).
 
 ---
@@ -66,29 +49,32 @@ language, or direct parameters).
 ## 2. Option-number handling
 
 After the menu, a bare option number is a valid reply. Map it to canonical
-parameters. Options 2, 5, and 7 need one follow-up question before you have a
-complete request.
+parameters. Options `1`–`7` are generation and continue in this file; options
+`8`–`11` are report and continue in `references/report-mode.md`.
+
+**Generation — options `1`–`7`.** Options 2, 5, and 7 need one follow-up
+question before you have a complete request.
 
 | Input | Meaning | Canonical parameters | Follow-up |
 |-------|---------|----------------------|-----------|
-| `1` | 今天 | `date=<local today>` | — |
-| `2` | 指定日期 | `date=<asked>` | ask, then resolve |
-| `3` | 最近 7 天 | `days=7` | — |
-| `4` | 最近 30 天 | `days=30` | — |
-| `5` | 自訂日期範圍 | `from=<asked> to=<asked>` | ask, then resolve |
-| `6` | 今天，並包含尚未提交的異動 | `date=<local today> include_uncommitted=true` | — |
-| `7` | 自訂日期或範圍，並包含尚未提交的異動 | `date=…` or `from=… to=…`, plus `include_uncommitted=true` | ask, then resolve |
+| `1` | Today | `date=<local today>` | — |
+| `2` | A specific date | `date=<asked>` | ask, then resolve |
+| `3` | Last 7 days | `days=7` | — |
+| `4` | Last 30 days | `days=30` | — |
+| `5` | A custom date range | `from=<asked> to=<asked>` | ask, then resolve |
+| `6` | Today, including uncommitted changes | `date=<local today> include_uncommitted=true` | — |
+| `7` | A custom date or range, including uncommitted changes | `date=…` or `from=… to=…`, plus `include_uncommitted=true` | ask, then resolve |
 
 For option `2`, ask verbatim:
 
 ```
-請輸入要整理的日期，例如 2026-07-01。
+Which date? For example 2026-07-01.
 ```
 
 For option `5`, ask verbatim:
 
 ```
-請輸入起始與結束日期，例如 2026-07-01 到 2026-07-10。
+Which start and end date? For example 2026-07-01 to 2026-07-10.
 ```
 
 For option `7`, ask for a date **or** a range (reuse the option-2 prompt for a
@@ -98,13 +84,37 @@ parameters.
 
 Once you have complete parameters, continue to validation (section 5).
 
+**Report — options `8`–`11`.** Every one of them needs a follow-up: the menu row
+names the *kind* of report, never its scope, so none of them is a complete
+request on its own. Ask, then hand to `references/report-mode.md`.
+
+| Input | Meaning | Scope | Follow-up, verbatim |
+|-------|---------|-------|---------------------|
+| `8` | Work summary for a period | date | `Which period? For example last week, or 2026-07-01 to 2026-07-10.` |
+| `9` | CHANGELOG for a version or tag | ref | `Which version or tag? Run --list-tags if you are not sure.` |
+| `10` | What a specific person worked on | date + author | `Whose work, and over which period?` |
+| `11` | Outstanding tech debt and follow-ups | date | `Over which period? Reply "all" for the whole worklog.` |
+
+Option `10` **must** ask for the name and must not proceed without one. "我" and
+"me" are not answers: `git config user.name/email` is not evidence of who is
+typing, and a report confidently attributed to the wrong person is worse than no
+report. The rule and the matching mechanics are in `references/report-mode.md`
+§6.
+
+Report options write nothing, so they have no dry-run and no `preview_id`. The
+90-day reading cap applies instead of the 30-day generation cap.
+
 ---
 
 ## 3. Natural-language driving
 
-The user may skip option numbers and describe the range in prose. You (the model)
-convert prose to canonical parameters; the scripts never parse free text. Common
-phrasings and their normalisation:
+Once the skill is invoked, the user may skip option numbers and describe the
+range in prose — on the invocation line (`/git-worklog 整理最近 7 天`) or as a
+reply to the menu. You (the model) convert prose to canonical parameters; the
+scripts never parse free text. The phrasings below stay listed in the languages
+users actually type: understanding zh-TW input is unrelated to the menu being
+English, and narrowing this table would remove a capability rather than tighten
+one. Common phrasings and their normalisation:
 
 | User says | Canonical parameters |
 |-----------|----------------------|
@@ -124,7 +134,9 @@ phrasings and their normalisation:
 ## 4. Direct-parameter invocation (power users)
 
 A user who already knows the interface can pass parameters on the invocation and
-**skip the menu entirely**:
+**skip the menu entirely**. The invocation itself is still theirs to make — there
+is no path into this skill that does not start with the user typing
+`/git-worklog`:
 
 ```
 /git-worklog date=2026-07-01

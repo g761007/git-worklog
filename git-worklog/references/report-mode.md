@@ -12,6 +12,13 @@ ordinary generation pipeline with its own dry-run and confirmation (§4).
 Generation mode is the subject of `SKILL.md` §§2–6; this file covers report mode
 only. Mode routing is `SKILL.md` §1a.
 
+**How a report is reached.** Menu options `8`–`11`, natural language, or explicit
+parameters — but always after the user has invoked `/git-worklog` themselves, and
+never on your own initiative. Report mode used to have no menu row at all, which
+made it reachable only by a phrasing the user had to already know; the four rows
+now on the menu (`interaction-flow.md` §2) cover the four scenarios below that
+users ask for most. The other two in §6 are still reachable, just by asking.
+
 ---
 
 ## 1. What report mode is for

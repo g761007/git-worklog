@@ -6,6 +6,69 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-27
+
+### Changed
+
+- **⚠️ The skill is user-invoked only. It will no longer start on its own.**
+  `SKILL.md` carries `disable-model-invocation: true`, which removes it from the
+  model's skill listing entirely — so on Claude Code the only way in is typing
+  `/git-worklog`. Phrasings that used to reach it unaided (「整理上一週工作摘要」,
+  「整理 v1.0.1 CHANGELOG」, 「Daniel 上個月做了什麼」) now need the invocation in
+  front: `/git-worklog 整理上一週工作摘要`. Natural language itself is unchanged —
+  what changed is who decides that a worklog run should begin.
+
+  **Know the failure mode this accepts.** Ask for a worklog *without* the slash
+  and nothing will announce that the skill exists. The model will simply answer
+  from `git log`: no diffs read, no evidence checked against the tree, no
+  required-file coverage, no dry-run, nothing written to `.git-worklog/`. That
+  result looks like a worklog and is exactly the commit-message paraphrase this
+  tool exists to refuse (`SKILL.md` §0). It is a deliberate trade — explicit
+  control over the run, at the cost of a silent fallback when the invocation is
+  forgotten — and it is not mitigated anywhere. Type the slash.
+
+  There is no equivalent field for non-Claude hosts, so `agents/openai.yaml`
+  narrows what it can instead: the manifest `description` is tightened, and the
+  `ui.keywords` that describe ordinary development talk rather than this tool
+  (`release notes`, `git history`, `handoff`, `weekly summary`, `工作摘要`,
+  `週報`) are dropped. That lowers the odds of an unrequested run on those hosts;
+  it does not make them user-invoked.
+
+- **⚠️ The no-argument menu is English, and now covers reporting.** It grew from
+  7 options to 11, grouped by consequence: `1`–`7` generate and write to
+  `.git-worklog/`, `8`–`11` report and write nothing. Report mode previously had
+  no menu row at all — it was reachable only by a phrasing the user had to
+  already know, which stopped being viable the moment natural language required
+  the slash. The four rows cover period summary, release CHANGELOG, per-person
+  contribution and outstanding tech debt; handoff and feature-history reports are
+  unchanged and still reached by asking.
+
+  The menu is interface text, so it follows the CLI's existing English-only
+  interface policy (`language.py`, §6.2.13) rather than the worklog's language
+  contract. **Worklog content is unaffected**: it still follows the conversation
+  (`SKILL.md` §2a), so an English menu routinely produces a zh-TW worklog. The
+  two option-number follow-up prompts in `references/interaction-flow.md` are
+  English for the same reason. The tables that teach the model to *understand*
+  zh-TW input are untouched — reading Chinese and printing English are separate
+  concerns — as are the zh-TW headings in the day-file template, which are
+  content.
+
+- The skill's `description` is a single user-facing line. With model invocation
+  off it is no longer matched against anything; it is what a user reads in the
+  slash-command picker, which shows one line. The previous 12-line block of
+  trigger keywords was loaded into every session's context to no purpose.
+
+### Added
+
+- `argument-hint` in the frontmatter, so the invocation line says what it accepts
+  before the menu is printed.
+- Guard tests for both of the above (`tests/test_skill_invocation.py`). The
+  frontmatter flag is the entire mechanism and nothing else in the suite would
+  notice its removal; the menu exists in two files that must agree, and they had
+  already drifted before the test existed. A third copy in
+  `references/interaction-flow.md` was removed — it is now a cross-reference, and
+  a test stops it coming back.
+
 ## [1.0.0] - 2026-07-18
 
 The first public release since 0.4.0. Everything below landed across the internal
@@ -755,7 +818,8 @@ satisfied.
 - A stdlib-only `unittest` suite and GitHub Actions CI on Python 3.9 / 3.12 / 3.13,
   with a `skill.zip` release artifact.
 
-[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/g761007/git-worklog/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/g761007/git-worklog/compare/v0.4.0...v1.0.0
 [0.4.0]: https://github.com/g761007/git-worklog/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/g761007/git-worklog/compare/v0.3.0...v0.3.1

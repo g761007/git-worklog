@@ -111,7 +111,11 @@ Prefer a symlink while developing, so edits take effect immediately:
 ln -s "$(pwd)/git-worklog" ~/.claude/skills/git-worklog
 ```
 
-Then invoke it with `/git-worklog` (or natural language like “整理最近 7 天”).
+Then invoke it with `/git-worklog`. **You have to type that** — since 1.1.0 the
+skill carries `disable-model-invocation: true`, so Claude will not start it for
+you on the strength of something you said in passing. Natural language still
+works, on the invocation line (`/git-worklog 整理最近 7 天`) or as a reply to the
+menu.
 
 Nothing is installed and nothing is compiled: the engine sits inside that folder
 and runs on the standard library alone.
@@ -195,21 +199,47 @@ skill.
 
 ### Usage
 
-Run with no arguments to get the range menu; the skill does nothing until you
-pick a range:
+Run with no arguments to get the menu; the skill does nothing until you pick an
+option:
 
 ```
 /git-worklog
 ```
 
-Or drive it directly / in natural language:
+```
+Choose what to do:
+
+[Generate worklog] writes to .git-worklog/ — always previews first
+ 1. Today
+ 2. A specific date
+ 3. Last 7 days
+ 4. Last 30 days
+ 5. A custom date range
+ 6. Today, including uncommitted changes
+ 7. A custom date or range, including uncommitted changes
+
+[Report from the existing worklog] read-only — nothing is modified
+ 8. Work summary for a period
+ 9. CHANGELOG for a version or tag
+10. What a specific person worked on
+11. Outstanding tech debt and follow-ups
+
+Limits: generate up to 30 days, report up to 90 days.
+Reply with an option number, or just describe what you want in any language.
+```
+
+The menu is English because it is interface text. The worklog itself is not: its
+language follows the conversation, so asking in Chinese gets you a zh-TW worklog
+from an English menu. See “Configuration” below.
+
+Or skip the menu and say what you want on the invocation line:
 
 ```
 /git-worklog days=7
 /git-worklog date=2026-07-01
 /git-worklog from=2026-07-01 to=2026-07-10
 /git-worklog date=2026-07-15 include_uncommitted=true
-整理最近 7 天，包含目前還沒有 commit 的修改
+/git-worklog 整理最近 7 天，包含目前還沒有 commit 的修改
 ```
 
 Every valid request produces a **dry-run preview** with a `preview_id`. Confirm
@@ -220,15 +250,16 @@ with “寫入” / “確認更新” / `apply <preview_id>` to write. See
 
 Once days are logged, ask questions instead of building files. Reporting is
 **read-only** — the answer comes back in the conversation, nothing is written, so
-there is no dry-run to confirm:
+there is no dry-run to confirm. Menu options `8`–`11` cover the common cases;
+anything else is a sentence after the invocation:
 
 ```
-整理上一週工作摘要
-整理 v1.0.1 CHANGELOG
-我要交接，整理最近一個月的重點與待辦
-Daniel 上個月做了什麼
-會員搜尋這功能是怎麼演進的
-目前累積哪些技術債與待追蹤事項
+/git-worklog 整理上一週工作摘要
+/git-worklog 整理 v1.0.1 CHANGELOG
+/git-worklog 我要交接，整理最近一個月的重點與待辦
+/git-worklog Daniel 上個月做了什麼
+/git-worklog 會員搜尋這功能是怎麼演進的
+/git-worklog 目前累積哪些技術債與待追蹤事項
 ```
 
 Reports are built from the day files, so they inherit their analysis rather than
@@ -451,7 +482,9 @@ cp -r git-worklog <your-project>/.claude/skills/git-worklog
 ln -s "$(pwd)/git-worklog" ~/.claude/skills/git-worklog
 ```
 
-之後以 `/git-worklog` 或自然語言（例如「整理最近 7 天」）呼叫。
+之後以 `/git-worklog` 呼叫。**這行你得自己打**——自 1.1.0 起 skill 帶有
+`disable-model-invocation: true`，Claude 不會因為你隨口提了一句就替你啟動它。自然語言
+仍然可用，寫在呼叫行上（`/git-worklog 整理最近 7 天`）或當作選單的回覆。
 
 不需要安裝任何東西，也不需要編譯：引擎就在那個資料夾裡，只用標準庫執行。
 
@@ -525,20 +558,45 @@ git-worklog apply --preview-id <preview_id>
 
 ### 使用方式
 
-無參數呼叫時只會顯示範圍選單，**在你選擇範圍前不做任何分析**：
+無參數呼叫時只會顯示選單，**在你選擇之前不做任何分析**：
 
 ```
 /git-worklog
 ```
 
-也可直接帶參數或用自然語言：
+```
+Choose what to do:
+
+[Generate worklog] writes to .git-worklog/ — always previews first
+ 1. Today
+ 2. A specific date
+ 3. Last 7 days
+ 4. Last 30 days
+ 5. A custom date range
+ 6. Today, including uncommitted changes
+ 7. A custom date or range, including uncommitted changes
+
+[Report from the existing worklog] read-only — nothing is modified
+ 8. Work summary for a period
+ 9. CHANGELOG for a version or tag
+10. What a specific person worked on
+11. Outstanding tech debt and follow-ups
+
+Limits: generate up to 30 days, report up to 90 days.
+Reply with an option number, or just describe what you want in any language.
+```
+
+選單是英文，因為它是**介面**文字；工作日誌本身不是。日誌語言跟著對話走，所以用中文提問、
+從英文選單進去，產出的仍是 zh-TW 日誌。詳見下方「設定」。
+
+也可以跳過選單，直接把要求寫在呼叫行上：
 
 ```
 /git-worklog days=7
 /git-worklog date=2026-07-01
 /git-worklog from=2026-07-01 to=2026-07-10
 /git-worklog date=2026-07-15 include_uncommitted=true
-整理最近 7 天，包含目前還沒有 commit 的修改
+/git-worklog 整理最近 7 天，包含目前還沒有 commit 的修改
 ```
 
 任何有效請求都會先產生 **dry-run 預覽**與一個 `preview_id`，以「寫入」／「確認更新」／
@@ -547,15 +605,16 @@ git-worklog apply --preview-id <preview_id>
 ### 從工作日誌產生報告
 
 日誌累積之後，可以直接提問，而不是再產生檔案。報告模式是**唯讀**的——答案直接回在對話裡，
-不寫任何檔案，因此沒有 dry-run 需要確認：
+不寫任何檔案，因此沒有 dry-run 需要確認。選單的 `8`–`11` 涵蓋常用情境，其餘直接在呼叫行
+上講一句話即可：
 
 ```
-整理上一週工作摘要
-整理 v1.0.1 CHANGELOG
-我要交接，整理最近一個月的重點與待辦
-Daniel 上個月做了什麼
-會員搜尋這功能是怎麼演進的
-目前累積哪些技術債與待追蹤事項
+/git-worklog 整理上一週工作摘要
+/git-worklog 整理 v1.0.1 CHANGELOG
+/git-worklog 我要交接，整理最近一個月的重點與待辦
+/git-worklog Daniel 上個月做了什麼
+/git-worklog 會員搜尋這功能是怎麼演進的
+/git-worklog 目前累積哪些技術債與待追蹤事項
 ```
 
 報告是從每日檔案產生的，直接沿用既有分析，不重新推導。若範圍內某天有 commit 卻沒有日誌，
