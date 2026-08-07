@@ -337,6 +337,15 @@ can ever fire, and "try Write, fall back to Bash" is not a strategy — a subage
 that recovers did so by chance, having re-remembered the task some turns later.
 Two real runs did not recover and lost the whole day's analysis.
 
+**The Edit tool goes the same way**, and it is the more dangerous of the two
+because of *when* a subagent reaches for it. The self-verification below works:
+a subagent whose file fails `json.load` sees the traceback and knows it has a
+problem. What it does next, unprompted, is open Edit to patch the one broken
+line — and that call vanishes too, so a day that was one rewrite from being
+correct stalls instead. Banning Write alone leaves the repair path broken, which
+is why §9 and §10 ban both tools and say the repair is a whole-file heredoc
+rewrite rather than a patch.
+
 The mechanism is therefore pinned:
 
 ```
@@ -584,18 +593,27 @@ i.e. ONE Bash call shaped exactly like this:
   {"date": "...", ...the whole object...}
   GIT_WORKLOG_JSON_EOF
 
-MUST NOT use the Write tool. In a subagent the Write call vanishes: no tool
-result, no error, no file — and your next turn will proceed as though you never
-made it. You will not notice, so there is nothing to retry. Bash works normally.
+MUST NOT use the Write tool or the Edit tool — not to create this file, and not
+to repair it later. In a subagent both calls vanish: no tool result, no error,
+no change on disk — and your next turn will proceed as though you never made the
+call. You will not notice, so there is nothing to retry. Bash works normally and
+is the only mechanism available to you.
 
 The delimiter MUST keep its single quotes and MUST start at column 0 on both
 lines. Your prose contains `backticked` code symbols; an unquoted heredoc would
 execute them as commands and expand $.
 
+Every `"` inside a JSON string value MUST be escaped as \" — the heredoc passes
+your text through literally, so a raw quote in the middle of a sentence ends the
+string early and the whole file stops parsing. If you are quoting a phrase in
+prose, 「」 or 『』 avoid the problem entirely.
+
 The file must contain ONLY the JSON object — valid parseable JSON, no markdown
 fence, no prose. Then verify it in a second Bash call:
   python3 -c "import json;json.load(open('[result_path]'))"
-If that fails, write the file once more. If it fails again, reply FAILED:[date]
+If that fails, read the error, then WRITE THE WHOLE FILE AGAIN with the same
+heredoc — the entire object, not a patch, not a sed, not an append, and never
+Edit. Verify again. If the second write also fails to parse, reply FAILED:[date]
 and stop.
 
 Do NOT put the JSON in your reply: the reply channel drops and truncates
@@ -746,19 +764,22 @@ i.e. ONE Bash call shaped exactly like this:
   {...the whole object...}
   GIT_WORKLOG_JSON_EOF
 
-MUST NOT use the Write tool. In a subagent the Write call vanishes: no tool
-result, no error, no file — and your next turn will proceed as though you never
-made it. Bash works normally.
+MUST NOT use the Write tool or the Edit tool — not to create this file, and not
+to repair it later. In a subagent both calls vanish: no tool result, no error,
+no change on disk — and your next turn will proceed as though you never made the
+call. Bash is the only mechanism available to you.
 
 The delimiter MUST keep its single quotes and MUST start at column 0 on both
 lines, or the `backticked` code symbols in your prose will be executed as
-commands and $ will be expanded.
+commands and $ will be expanded. Every `"` inside a JSON string value MUST be
+escaped as \", or it ends the string early and the file stops parsing.
 
 The file must contain ONLY the JSON object — no markdown fence, no prose. Then
 verify it in a second Bash call:
   python3 -c "import json;json.load(open('[that path]'))"
-If that fails, write it once more; if it fails again, say so in your reply
-instead of leaving a broken file. Do NOT put the JSON in your reply: the reply
+If that fails, write the WHOLE file again with the same heredoc — not a patch,
+never Edit — and verify again; if the second write also fails, say so in your
+reply instead of leaving a broken file. Do NOT put the JSON in your reply: the reply
 channel drops and truncates content. After writing and verifying the file, reply
 with just: DONE
 

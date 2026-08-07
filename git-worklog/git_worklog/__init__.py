@@ -28,7 +28,12 @@ PATH.
 # subagent contract pinned the write mechanism to a Bash heredoc, banned the
 # Write tool, and gave a Day Subagent a second thing it may reply --
 # FAILED:<date>. For anyone reading the contract that is an interface change.
-__version__ = "1.2.0"
+#
+# 1.2.1 is a patch: 1.2.0 banned the Write tool but not Edit, so a subagent whose
+# result failed its own parse check reached for Edit to fix the one bad line and
+# stalled there. Nothing in the interface moved -- the ban simply covers the tool
+# it always should have.
+__version__ = "1.2.1"
 
 # On-disk layout version of `.git-worklog/`, re-exported for convenience. It
 # describes the *data*, not the tool, and bumps only when a migration is needed.

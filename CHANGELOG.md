@@ -6,6 +6,36 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-08-07
+
+### Fixed
+
+- **The Edit tool is banned too.** 1.2.0 banned `Write` and stopped there, which
+  left the repair path broken. Found the same day by dogfooding: a Day Subagent
+  wrote its result with the heredoc, ran the new self-verification, and correctly
+  caught that its own file would not parse — then opened `Edit` to patch the one
+  bad line. `Edit` vanishes exactly like `Write`, so the subagent stalled on a
+  day's analysis that was one rewrite away from being correct.
+
+  `Edit` is the more dangerous of the two precisely because of *when* a subagent
+  reaches for it: the moment verification works. §6a, §9 and §10 now ban both
+  tools by name, and say the repair is **another whole-file heredoc — not a
+  patch, not a sed, never Edit**.
+- **Escaping is now spelled out.** The underlying defect in that run was a raw
+  `"` inside a JSON string value: a quoted heredoc passes text through
+  literally, so `"…the rule is "never", not "always"…"` ends the string early
+  and 20KB of correct analysis stops parsing. The templates now require `\"`
+  inside string values, and suggest 「」/『』 for quoted phrases in prose, which
+  sidesteps it entirely. This is not specific to heredocs — the same result
+  would have been malformed through the Write tool.
+- **`SKILL.md` §7 gained the matching diagnostic** for what an orchestrator
+  actually sees: a day reported `invalid` with `RESULT_NOT_JSON` whose subagent
+  then went quiet. The analysis is not lost — that subagent still holds it, so
+  tell it to rewrite the whole file rather than re-dispatching from scratch.
+
+`tests/test_subagent_write_mechanism.py` pins the widened ban, the whole-file
+repair, and the escaping rule in both templates.
+
 ## [1.2.0] - 2026-08-07
 
 ### Changed
@@ -892,7 +922,8 @@ satisfied.
 - A stdlib-only `unittest` suite and GitHub Actions CI on Python 3.9 / 3.12 / 3.13,
   with a `skill.zip` release artifact.
 
-[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/g761007/git-worklog/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/g761007/git-worklog/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/g761007/git-worklog/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/g761007/git-worklog/compare/v0.4.0...v1.0.0
