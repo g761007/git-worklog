@@ -308,6 +308,30 @@ the old file, and refuses if the legacy markers are corrupt.
   reply text, which drops and truncates. Files are kept after the run, so a
   surprising worklog entry can be traced to the analysis behind it.
 
+### State directory
+
+Everything the tool remembers between commands lives in one directory outside
+your repositories — `~/.git-worklog/`, or wherever `$GIT_WORKLOG_HOME` points:
+
+| Path | Holds |
+|---|---|
+| `analysis/<run_id>/tasks/` | one manifest per day: what to analyse, in which language, which files are required |
+| `analysis/<run_id>/results/` | what each Day Subagent concluded |
+| `previews/` | the exact final text of every file a pending apply would write |
+
+**Nothing here is ever deleted automatically.** A preview past its 24h TTL stops
+being applicable but stays on disk, and every run's manifests and results are
+kept on purpose, so a worklog entry that reads oddly months later can still be
+traced back to the analysis behind it. The directory therefore only grows, and
+there is no `prune` command — deciding when a run stops being worth keeping is
+yours, not the tool's.
+
+**Deleting it is safe.** An applied worklog lives in its repository under
+`.git-worklog/` and does not depend on this directory at all. The only thing you
+lose is a preview you have not applied yet: `apply` will answer
+`UNKNOWN_PREVIEW`, and you build a new preview. Delete the whole tree, or just
+the `analysis/<run_id>/` directories you no longer care about.
+
 ### Development commands
 
 Every command prints one JSON object to stdout; `--text` renders it for humans.
@@ -654,6 +678,26 @@ skill 會明講並詢問是否先補齊——**絕不默默降級成摘要 commi
 - **Subagent 分析結果**：每個 Day Subagent 把分析**寫進**
   `~/.git-worklog/analysis/<run_id>/<date>.json`，而不是用回傳值交付——回傳通道會掉內容也會截斷。
   結果檔在執行後保留，方便回溯某段日誌是根據什麼分析寫出來的。
+
+### 狀態目錄
+
+工具在指令之間需要記住的東西，全部放在 repo 之外的同一個目錄——`~/.git-worklog/`，
+或 `$GIT_WORKLOG_HOME` 指向的位置：
+
+| 路徑 | 內容 |
+|---|---|
+| `analysis/<run_id>/tasks/` | 每天一份 manifest：要分析什麼、用什麼語言、哪些檔案必須交代 |
+| `analysis/<run_id>/results/` | 每個 Day Subagent 的分析結果 |
+| `previews/` | 待套用的 apply 會寫入的每個檔案的完整最終內容 |
+
+**這裡的東西永遠不會被自動刪除。** 超過 24 小時 TTL 的 preview 只是不再能套用，檔案仍
+留在磁碟上；每次執行的 manifest 與結果也是刻意保留的——幾個月後看到一段讀起來奇怪的
+日誌，還能回溯它是根據什麼分析寫出來的。因此這個目錄只增不減，而且**沒有** `prune`
+指令：一次執行何時不再值得保留，是你的判斷，不是工具的。
+
+**刪掉它是安全的。** 已經套用的日誌存在各自 repo 的 `.git-worklog/` 底下，完全不依賴
+這個目錄。唯一會失去的是還沒套用的 preview——`apply` 會回報 `UNKNOWN_PREVIEW`，重新
+建一份 preview 即可。整棵刪掉，或只刪掉你不再在意的 `analysis/<run_id>/` 都可以。
 
 ### 安全模型
 
