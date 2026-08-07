@@ -293,7 +293,47 @@ skill 從 `~/.claude/skills/git-worklog`（symlink → `~/.skillpod/skills/git-w
 至此 prepare → 派工 → collect → preview → apply 全程在新契約下走通，補上了提案階段
 「未以真實流程實測」那條缺口。**2026-07-27 仍是缺口**，本次未處理。
 
-### 7.5 §6 的哪幾項假設被實測推翻
+### 7.5 1.2.0 上線當天就被 dogfooding 抓到的漏洞 → 1.2.1
+
+發布 1.2.0 之後，第一件事是用它產生 **2026-08-07**（也就是這整套修法本身）的日誌。
+那次執行暴露了 1.2.0 的一個缺口，過程如下：
+
+| row | 事件 |
+|---|---|
+| 84 | `Bash` heredoc，14,617 字元 → 寫檔成功 |
+| 87 | `python3 -c "import json;json.load(...)"` 自我驗證 |
+| 88 | **exit 1** — `Expecting ',' delimiter: line 112 column 546` |
+| 90 / 93 / 96 | subagent 自行診斷，定位到 line 112 |
+| 98 | **`Edit`** ← transcript 就此結束 |
+
+兩個發現，方向相反：
+
+**好的一半：自我驗證真的有用。** 這是 1.2.0 新加的步驟，它在 `collect` 之前就抓到了
+壞掉的結果，而且 subagent 準確定位到出問題的那一行。若沒有這一步，這份檔案會一路
+帶著壞 JSON 走到 `collect` 才被擋下。
+
+**壞的一半：修復路徑仍然是壞的。** 1.2.0 只禁了 `Write`，沒禁 `Edit`。subagent 偵測到
+問題之後，很自然地伸手去用 `Edit` 修那一行——**`Edit` 和 `Write` 一樣會憑空消失**，
+於是一份「差一次重寫就正確」的分析卡死在那裡。而且 `Edit` 比 `Write` 更危險，因為
+subagent 伸手去拿它的時機，正好是驗證機制生效的那一刻。
+
+**真正的內容缺陷與寫檔機制無關。** line 112 壞在 JSON 字串值裡出現了未跳脫的雙引號：
+
+```
+"implementation": "…『The git golden rule is now "never on your own initiative", not "never"』說明。"
+```
+
+引號 heredoc 忠實地把文字原樣送出——那正是它該做的——所以那兩組裸 `"` 提前結束了
+JSON 字串。**用 Write 工具寫也會壞成一樣**，這不是機制的問題，是跳脫的問題。
+
+修法（1.2.1）：§6a／§9／§10 同時禁 `Write` 與 `Edit`，明寫「重寫必須是整檔 heredoc，
+不是 patch」，並要求 JSON 字串值內的 `"` 一律跳脫為 `\"`（prose 引用改用 「」／『』
+可以完全繞開）。SKILL.md §7 補上對應的診斷：看到 `RESULT_NOT_JSON` 且 subagent 沉默，
+不要重新派工——那個 subagent 還握著分析，叫它整檔重寫即可。
+
+至於今天這一天本身：依上述方式讓原 subagent 整檔重寫後，JSON 通過驗證。
+
+### 7.6 §6 的哪幾項假設被實測推翻
 
 | 提案階段的說法 | 實測結果 |
 |---|---|
