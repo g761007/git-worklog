@@ -259,9 +259,12 @@ and why deletions and non-source files are excused:
 **3c. Spawn one Day Subagent** per day, passing its `manifest_path` **and its
 `result_path`**. The subagent reads the real diffs and enough code context,
 determines the **end-of-day state** (a feature added then reverted the same day
-is *not* a live change), and **writes** the structured JSON from
-`references/subagent-contract.md` to that path, replying only `DONE` — results
-are never passed back as reply text, which drops and truncates them (§6a). It
+is *not* a live change), and **writes the structured JSON from
+`references/subagent-contract.md` to that path with a Bash quoted heredoc**,
+verifies that it parses, then replies only `DONE` — results are never passed back
+as reply text, which drops and truncates them (§6a). **The Write tool must not be
+used for this**: in a subagent that call vanishes — no result, no error, no file
+— and the subagent cannot tell, so it cannot retry (§6a). It
 must not write to the worklog. Days with no commits still write
 `has_changes:false`. A large day may fan out into Code Analysis Subagents grouped
 by work area, each writing to the manifest's `parts_dir` — never beside
@@ -422,6 +425,12 @@ git-worklog apply --preview-id <preview_id>
   by default — `preview` refuses a partial run outright (`RUN_NOT_COLLECTED`).
   The user may choose to write only the successful days; that means a run
   prepared for just those dates, not a preview that quietly leaves days out.
+- **A day is `missing` and its `result_path` does not exist on disk:** the
+  analysis never reached the file. Re-dispatch that date against the same
+  manifest, with the §9 prompt template's heredoc block reproduced verbatim —
+  a subagent that reached for the Write tool instead produces exactly this
+  signature: no file, no error, and nothing in its reply that looks wrong. Do
+  not write the result yourself to get past it, and do not re-run `prepare`.
 - **Date exists but re-analysis finds no commits:** do not auto-delete the day
   file; show the diff, keep MANUAL, and require explicit confirmation to clear
   GENERATED.

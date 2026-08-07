@@ -225,10 +225,11 @@ including cross-group deduplication within the day.
 
 ## 6. Day Subagent return schema (EXACT)
 
-**A Day Subagent delivers its result by writing a file, never by returning it as
-its reply.** The orchestrator mints a run directory and hands each subagent its
-own output path (§6a); the subagent's final action is to write exactly this
-object there, then reply only `DONE`.
+**A Day Subagent delivers its result by writing a file with a Bash quoted
+heredoc — never by returning it as its reply, and never with the Write tool.**
+The orchestrator mints a run directory and hands each subagent its own output
+path (§6a); the subagent's final action is to write exactly this object there,
+verify that it parses, then reply only `DONE`.
 
 The object below is what goes **in the file**. All keys are present even when the
 array is empty. The file contains the JSON object and nothing else — no prose, no
@@ -324,6 +325,44 @@ host's return channel, which is the pipeline's weakest link:
 A file has none of those properties, and it persists — so a later failure in
 rendering, preview or apply never costs the analysis a second time, and a human
 can read exactly what a subagent concluded.
+
+### The write is a Bash heredoc, never the Write tool
+
+**A subagent's Write tool call vanishes**: no tool result, no error, no file —
+and in the subagent's *next turn* the call never happened. That last property is
+what makes this unrecoverable from inside the subagent. It does not observe "my
+write returned nothing"; it observes "I have not written yet". So no contract
+rule of the form *"if the write returns nothing, do not treat it as success"*
+can ever fire, and "try Write, fall back to Bash" is not a strategy — a subagent
+that recovers did so by chance, having re-remembered the task some turns later.
+Two real runs did not recover and lost the whole day's analysis.
+
+The mechanism is therefore pinned:
+
+```
+cat > <result_path> <<'GIT_WORKLOG_JSON_EOF'
+{ …the day's JSON object… }
+GIT_WORKLOG_JSON_EOF
+```
+
+Three details are load-bearing, not style:
+
+- **The delimiter is quoted.** Result prose is full of `backticked` code symbols
+  (§8 requires them and checks them). An unquoted heredoc executes backticks as
+  command substitution and expands `$`. This is certain to corrupt a real result,
+  not an edge case.
+- **The delimiter must not appear in the content**, and must start at column 0
+  both times.
+- **The subagent verifies its own file** with
+  `python3 -c "import json;json.load(open('<path>'))"`, rewrites once on failure,
+  and only then replies `FAILED:<date>` (§11). A malformed result caught here is
+  repairable; caught at `collect` it has already cost the run.
+
+Size is not a reason to prefer one mechanism over the other: both carry the
+payload as literal text in a tool call, so the binding limit is what the model
+will emit, not what the tool will accept. The largest observed real result went
+through a heredoc as a 27,873-character command and parsed clean. Evidence and
+the probes behind this section: `docs/plans/2026-08-07-subagent-file-write-mechanism.md`.
 
 ### The flow
 
@@ -538,12 +577,30 @@ You are a Day Subagent for the Git Worklog skill. Analyse exactly ONE day of a
 Git repository and write structured JSON to a file. You do NOT write the worklog.
 
 HOW TO DELIVER YOUR RESULT (read this first)
-Your final action MUST be a file write saving your JSON to exactly this path:
+Write your JSON with a Bash quoted heredoc to exactly this path:
   [result_path from analyze prepare]
+i.e. ONE Bash call shaped exactly like this:
+  cat > [result_path] <<'GIT_WORKLOG_JSON_EOF'
+  {"date": "...", ...the whole object...}
+  GIT_WORKLOG_JSON_EOF
+
+MUST NOT use the Write tool. In a subagent the Write call vanishes: no tool
+result, no error, no file — and your next turn will proceed as though you never
+made it. You will not notice, so there is nothing to retry. Bash works normally.
+
+The delimiter MUST keep its single quotes and MUST start at column 0 on both
+lines. Your prose contains `backticked` code symbols; an unquoted heredoc would
+execute them as commands and expand $.
+
 The file must contain ONLY the JSON object — valid parseable JSON, no markdown
-fence, no prose. Do NOT put the JSON in your reply: the reply channel drops and
-truncates content, and losing it would throw away your whole analysis. After
-writing the file, reply with just: DONE
+fence, no prose. Then verify it in a second Bash call:
+  python3 -c "import json;json.load(open('[result_path]'))"
+If that fails, write the file once more. If it fails again, reply FAILED:[date]
+and stop.
+
+Do NOT put the JSON in your reply: the reply channel drops and truncates
+content, and losing it would throw away your whole analysis. After writing and
+verifying the file, reply with just: DONE
 
 INPUTS
 - date:               [YYYY-MM-DD]
@@ -664,7 +721,8 @@ OUTPUT
   inference as fact. A number you did not measure is never verified.
 - Put anything unverifiable in uncertainties[]; lower confidence rather than
   guess. Do NOT fabricate symbols, files, behaviours, counts, or test results.
-- Write the file, then reply with just: DONE
+- Write the file with the Bash heredoc above, verify it parses, then reply with
+  just: DONE
 ```
 
 ---
@@ -681,11 +739,28 @@ group within a single day and write structured findings to a file. You do NOT
 write the worklog and you do NOT decide the day's final wording.
 
 HOW TO DELIVER YOUR RESULT (read this first)
-Your final action MUST be a file write saving your JSON to exactly this path:
+Write your JSON with a Bash quoted heredoc to exactly this path:
   [the output path your parent Day Subagent gave you]
-The file must contain ONLY the JSON object — no markdown fence, no prose. Do NOT
-put the JSON in your reply: the reply channel drops and truncates content. After
-writing the file, reply with just: DONE
+i.e. ONE Bash call shaped exactly like this:
+  cat > [that path] <<'GIT_WORKLOG_JSON_EOF'
+  {...the whole object...}
+  GIT_WORKLOG_JSON_EOF
+
+MUST NOT use the Write tool. In a subagent the Write call vanishes: no tool
+result, no error, no file — and your next turn will proceed as though you never
+made it. Bash works normally.
+
+The delimiter MUST keep its single quotes and MUST start at column 0 on both
+lines, or the `backticked` code symbols in your prose will be executed as
+commands and $ will be expanded.
+
+The file must contain ONLY the JSON object — no markdown fence, no prose. Then
+verify it in a second Bash call:
+  python3 -c "import json;json.load(open('[that path]'))"
+If that fails, write it once more; if it fails again, say so in your reply
+instead of leaving a broken file. Do NOT put the JSON in your reply: the reply
+channel drops and truncates content. After writing and verifying the file, reply
+with just: DONE
 
 INPUTS
 - date:            [YYYY-MM-DD]
@@ -732,7 +807,8 @@ OUTPUT
 - Set confidence honestly (verified / inferred / unknown); never present an
   inference as fact. Record anything unverifiable as an uncertainty.
 - Do not deduplicate across other groups — the Day Subagent reconciles that.
-- Write the file, then reply with just: DONE
+- Write the file with the Bash heredoc above, verify it parses, then reply with
+  just: DONE
 ```
 
 A Day Subagent that fans out gives each Code Analysis Subagent a distinct path
@@ -760,6 +836,12 @@ that does not resolve, or a required file left unmentioned), or when its own
 `status` is `partial`/`failed`. A result the run never asked for lands in
 `unknown` and is not merged. Then (plan §22.5):
 
+- **A `FAILED:<date>` reply is a report, not a verdict.** A Day Subagent that
+  could not write a parseable result says so instead of replying `DONE` (§9),
+  and that changes nothing below: `collect` is still the only judge, the date
+  still lands in `missing`, the run is still partial, apply is still blocked.
+  What it buys is knowing before `collect` runs. It is never a reason to treat
+  the day as empty.
 - **Do not** substitute commit messages for the missing analysis. A failed day
   has no content, not a message-derived stand-in.
 - **Other days may continue** — one failed date does not abort the run.
