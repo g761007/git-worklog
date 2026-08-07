@@ -7,7 +7,7 @@ Markdown file per day plus an `index.md` that links them newest-first.
 It reads the actual diffs and surrounding code — never just commit messages —
 analyzes each day with its own subagent, previews every change as a dry-run, and
 only writes after you explicitly confirm. It logs the whole project's history
-(every author), and it never runs `git add/commit/push`.
+(every author), and it never runs `git add/commit/push` on its own.
 
 **Languages:** [English](#english) · [繁體中文](#繁體中文說明)
 
@@ -308,6 +308,30 @@ the old file, and refuses if the legacy markers are corrupt.
   reply text, which drops and truncates. Files are kept after the run, so a
   surprising worklog entry can be traced to the analysis behind it.
 
+### State directory
+
+Everything the tool remembers between commands lives in one directory outside
+your repositories — `~/.git-worklog/`, or wherever `$GIT_WORKLOG_HOME` points:
+
+| Path | Holds |
+|---|---|
+| `analysis/<run_id>/tasks/` | one manifest per day: what to analyse, in which language, which files are required |
+| `analysis/<run_id>/results/` | what each Day Subagent concluded |
+| `previews/` | the exact final text of every file a pending apply would write |
+
+**Nothing here is ever deleted automatically.** A preview past its 24h TTL stops
+being applicable but stays on disk, and every run's manifests and results are
+kept on purpose, so a worklog entry that reads oddly months later can still be
+traced back to the analysis behind it. The directory therefore only grows, and
+there is no `prune` command — deciding when a run stops being worth keeping is
+yours, not the tool's.
+
+**Deleting it is safe.** An applied worklog lives in its repository under
+`.git-worklog/` and does not depend on this directory at all. The only thing you
+lose is a preview you have not applied yet: `apply` will answer
+`UNKNOWN_PREVIEW`, and you build a new preview. Delete the whole tree, or just
+the `analysis/<run_id>/` directories you no longer care about.
+
 ### Development commands
 
 Every command prints one JSON object to stdout; `--text` renders it for humans.
@@ -385,7 +409,11 @@ acceptance-test matrix.
   cancelled, failed or already applied, is refused rather than reconciled.
 - Concurrent applies to one worklog are locked out; a lock is broken only when
   its owner is provably dead.
-- The skill never runs `git add/commit/push/fetch/pull/checkout/switch/merge/rebase`.
+- The skill never runs `git add/commit/push/fetch/pull/checkout/switch/merge/rebase`
+  on its own initiative. A run writes day files and stops; it never stages,
+  commits, or moves the repository as a consequence of having produced a
+  worklog. Asking your agent to commit the result afterwards is a separate
+  decision of yours, and the skill does not override it.
 
 ### License
 
@@ -401,7 +429,7 @@ Released under the [MIT License](LICENSE).
 
 它會閱讀**真正的 diff 與周邊程式碼**——不是只看 commit message——每一天各由一個
 subagent 分析，所有變更都先以 dry-run 預覽，**經你明確確認後才寫入**。它記錄整個專案的
-歷史（不分作者），而且**絕不執行** `git add/commit/push`。
+歷史（不分作者），而且**絕不主動執行** `git add/commit/push`。
 
 ### 目錄結構
 
@@ -655,6 +683,26 @@ skill 會明講並詢問是否先補齊——**絕不默默降級成摘要 commi
   `~/.git-worklog/analysis/<run_id>/<date>.json`，而不是用回傳值交付——回傳通道會掉內容也會截斷。
   結果檔在執行後保留，方便回溯某段日誌是根據什麼分析寫出來的。
 
+### 狀態目錄
+
+工具在指令之間需要記住的東西，全部放在 repo 之外的同一個目錄——`~/.git-worklog/`，
+或 `$GIT_WORKLOG_HOME` 指向的位置：
+
+| 路徑 | 內容 |
+|---|---|
+| `analysis/<run_id>/tasks/` | 每天一份 manifest：要分析什麼、用什麼語言、哪些檔案必須交代 |
+| `analysis/<run_id>/results/` | 每個 Day Subagent 的分析結果 |
+| `previews/` | 待套用的 apply 會寫入的每個檔案的完整最終內容 |
+
+**這裡的東西永遠不會被自動刪除。** 超過 24 小時 TTL 的 preview 只是不再能套用，檔案仍
+留在磁碟上；每次執行的 manifest 與結果也是刻意保留的——幾個月後看到一段讀起來奇怪的
+日誌，還能回溯它是根據什麼分析寫出來的。因此這個目錄只增不減，而且**沒有** `prune`
+指令：一次執行何時不再值得保留，是你的判斷，不是工具的。
+
+**刪掉它是安全的。** 已經套用的日誌存在各自 repo 的 `.git-worklog/` 底下，完全不依賴
+這個目錄。唯一會失去的是還沒套用的 preview——`apply` 會回報 `UNKNOWN_PREVIEW`，重新
+建一份 preview 即可。整棵刪掉，或只刪掉你不再在意的 `analysis/<run_id>/` 都可以。
+
 ### 安全模型
 
 - 一律先 dry-run；未經明確確認絕不寫入。
@@ -670,7 +718,9 @@ skill 會明講並詢問是否先補齊——**絕不默默降級成摘要 commi
   分析 run，以及專案語言設定。只要有任一項變動，或 preview 已過期／已取消／已失敗／
   已套用，一律拒絕，而不是自行調和。
 - 同一份工作日誌的並行 apply 會被鎖擋下；只有在持有者確定已死時才會破鎖。
-- Skill 絕不執行 `git add/commit/push/fetch/pull/checkout/switch/merge/rebase`。
+- Skill **絕不主動執行** `git add/commit/push/fetch/pull/checkout/switch/merge/rebase`。
+  一次執行只寫入日檔然後停下，不會因為「日誌寫完了」就順手 stage、commit 或移動 repo。
+  日誌產出之後你另外要求 agent commit，那是你對自己 repo 的決定，這條規則管不到。
 
 ### 開發指令
 

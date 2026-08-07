@@ -23,7 +23,12 @@ PATH.
 # field changed, but the skill stopped answering natural language without
 # /git-worklog and its menu switched to English. That is not an API break, and it
 # is not invisible either -- hence the prominent Changed entry in the CHANGELOG.
-__version__ = "1.1.0"
+#
+# 1.2.0 on the same reading: no command, flag or JSON field changed, but the
+# subagent contract pinned the write mechanism to a Bash heredoc, banned the
+# Write tool, and gave a Day Subagent a second thing it may reply --
+# FAILED:<date>. For anyone reading the contract that is an interface change.
+__version__ = "1.2.0"
 
 # On-disk layout version of `.git-worklog/`, re-exported for convenience. It
 # describes the *data*, not the tool, and bumps only when a migration is needed.
