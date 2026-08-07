@@ -51,7 +51,15 @@ a preview, or anything you can apply.
   `.git-worklog/days/<date>.md`; re-analysing one day never touches another day's
   file. `index.md` is rebuilt from the day files.
 - **Preserve every day's MANUAL region and the index MANUAL region, forever.**
-- **Never run** `git add/commit/push/fetch/pull/checkout/switch/merge/rebase`.
+- **Never run** `git add/commit/push/fetch/pull/checkout/switch/merge/rebase`
+  **on your own initiative.** A worklog run writes files and stops there: it
+  does not stage them, commit them, or move the repository underneath the user.
+  Nothing in this flow — not `apply`, not a backfill, not report mode — is ever
+  a reason to touch git state, and "the worklog is finished, so I should commit
+  it" is exactly the reasoning this forbids. What it does *not* forbid is the
+  user asking for a commit themselves, in their own words, as a separate
+  request; that is their decision about their repository, and this rule has no
+  standing over it. The line is who decided, not which command ran.
 
 ---
 

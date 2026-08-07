@@ -7,7 +7,7 @@ Markdown file per day plus an `index.md` that links them newest-first.
 It reads the actual diffs and surrounding code — never just commit messages —
 analyzes each day with its own subagent, previews every change as a dry-run, and
 only writes after you explicitly confirm. It logs the whole project's history
-(every author), and it never runs `git add/commit/push`.
+(every author), and it never runs `git add/commit/push` on its own.
 
 **Languages:** [English](#english) · [繁體中文](#繁體中文說明)
 
@@ -409,7 +409,11 @@ acceptance-test matrix.
   cancelled, failed or already applied, is refused rather than reconciled.
 - Concurrent applies to one worklog are locked out; a lock is broken only when
   its owner is provably dead.
-- The skill never runs `git add/commit/push/fetch/pull/checkout/switch/merge/rebase`.
+- The skill never runs `git add/commit/push/fetch/pull/checkout/switch/merge/rebase`
+  on its own initiative. A run writes day files and stops; it never stages,
+  commits, or moves the repository as a consequence of having produced a
+  worklog. Asking your agent to commit the result afterwards is a separate
+  decision of yours, and the skill does not override it.
 
 ### License
 
@@ -425,7 +429,7 @@ Released under the [MIT License](LICENSE).
 
 它會閱讀**真正的 diff 與周邊程式碼**——不是只看 commit message——每一天各由一個
 subagent 分析，所有變更都先以 dry-run 預覽，**經你明確確認後才寫入**。它記錄整個專案的
-歷史（不分作者），而且**絕不執行** `git add/commit/push`。
+歷史（不分作者），而且**絕不主動執行** `git add/commit/push`。
 
 ### 目錄結構
 
@@ -714,7 +718,9 @@ skill 會明講並詢問是否先補齊——**絕不默默降級成摘要 commi
   分析 run，以及專案語言設定。只要有任一項變動，或 preview 已過期／已取消／已失敗／
   已套用，一律拒絕，而不是自行調和。
 - 同一份工作日誌的並行 apply 會被鎖擋下；只有在持有者確定已死時才會破鎖。
-- Skill 絕不執行 `git add/commit/push/fetch/pull/checkout/switch/merge/rebase`。
+- Skill **絕不主動執行** `git add/commit/push/fetch/pull/checkout/switch/merge/rebase`。
+  一次執行只寫入日檔然後停下，不會因為「日誌寫完了」就順手 stage、commit 或移動 repo。
+  日誌產出之後你另外要求 agent commit，那是你對自己 repo 的決定，這條規則管不到。
 
 ### 開發指令
 

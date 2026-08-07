@@ -38,6 +38,19 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   what the tool accepts. The largest observed real result went through a heredoc
   as a 27,873-character command and parsed clean.
 
+- **The git golden rule is now "never on your own initiative", not "never".**
+  `SKILL.md` §0 forbade running `git add/commit/push/…` outright. The intent was
+  always that producing a worklog must not move the repository underneath the
+  user — but as written it also forbade the user asking, in their own words, for
+  the result to be committed, which is their decision about their own repository
+  and not the skill's to veto. The rule now says what it meant: a run writes day
+  files and stops, and "the worklog is finished, so I should commit it" is
+  exactly the reasoning it forbids. The line is who decided, not which command
+  ran. `README.md` carries the same wording in both languages.
+  `references/interaction-flow.md` and `references/report-mode.md` are unchanged
+  — they describe what `apply` and report mode do, and neither has ever touched
+  git state.
+
 ### Added
 
 - **A Day Subagent may now reply `FAILED:<date>`.** Previously its only reply
