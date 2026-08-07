@@ -6,6 +6,67 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-07
+
+### Changed
+
+- **⚠️ Subagents now deliver their result with a Bash quoted heredoc, and the
+  Write tool is banned outright.** A subagent's Write call vanishes — no tool
+  result, no error, no file — and in the subagent's *next* turn the call never
+  happened. That last part is why nothing softer works: the subagent does not
+  observe "my write returned nothing", it observes "I have not written yet", so
+  it cannot detect the failure, cannot retry, and cannot fall back. Three
+  consecutive real runs stopped dead on that one call and lost a full day's
+  analysis each; a fourth day only survived because its subagent happened to
+  re-remember the task some turns later and reached for Bash on its own.
+
+  `references/subagent-contract.md` §6a, §9 and §10 now pin the mechanism:
+
+  ```
+  cat > <result_path> <<'GIT_WORKLOG_JSON_EOF'
+  { …the day's JSON object… }
+  GIT_WORKLOG_JSON_EOF
+  ```
+
+  The quoting is load-bearing, not style — §8 requires result prose to carry
+  `backticked` code symbols, and an unquoted heredoc executes them as commands
+  and expands `$`. The subagent then parses its own file back with
+  `python3 -c "import json;json.load(open(...))"` before replying.
+
+  This is not a size trade-off: both mechanisms carry the payload as literal
+  text in a tool call, so the binding limit is what the model will emit, not
+  what the tool accepts. The largest observed real result went through a heredoc
+  as a 27,873-character command and parsed clean.
+
+### Added
+
+- **A Day Subagent may now reply `FAILED:<date>`.** Previously its only reply
+  was `DONE`. It sends `FAILED` when it could not write a parseable result after
+  one rewrite. This is a report, not a verdict: `analyze collect` remains the
+  only judge, the date still lands in `missing`, the run is still `partial_run`,
+  and apply is still blocked (§11). What it buys is knowing before `collect`
+  runs — and it is never a reason to treat the day as empty.
+- **`SKILL.md` §7 gained an executable diagnostic** for the signature this bug
+  leaves behind: a date reported `missing` whose `result_path` does not exist on
+  disk. The instruction is to re-dispatch that date against the same manifest
+  with the heredoc block reproduced verbatim — not to write the result by hand,
+  and not to re-run `prepare`.
+- **`tests/test_subagent_write_mechanism.py`** pins all of it: the quoted
+  delimiter and its column-0 terminator in both prompt templates, the explicit
+  ban on the Write tool, the self-verification step, the rationale in §6a, and
+  the `FAILED` reply in §11. Prose with no runtime behind it is exactly the kind
+  that gets tidied away.
+- **`README.md` gained a State directory / 狀態目錄 section** (both languages)
+  describing `~/.git-worklog/` — what `analysis/` and `previews/` hold, that
+  nothing is ever deleted automatically and there is deliberately no `prune`
+  command, and that deleting the tree is safe because an applied worklog lives
+  in its own repository (the only loss is an unapplied preview, which then
+  answers `UNKNOWN_PREVIEW`).
+
+The full investigation — six probes, the permission hypothesis that turned out
+to be wrong, and the before/after run that verified the fix — is in
+`docs/plans/2026-08-07-subagent-file-write-mechanism.md`.
+
 ## [1.1.0] - 2026-07-27
 
 ### Changed
@@ -818,7 +879,8 @@ satisfied.
 - A stdlib-only `unittest` suite and GitHub Actions CI on Python 3.9 / 3.12 / 3.13,
   with a `skill.zip` release artifact.
 
-[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/g761007/git-worklog/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/g761007/git-worklog/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/g761007/git-worklog/compare/v0.4.0...v1.0.0
 [0.4.0]: https://github.com/g761007/git-worklog/compare/v0.3.1...v0.4.0
