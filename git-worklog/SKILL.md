@@ -270,9 +270,11 @@ determines the **end-of-day state** (a feature added then reverted the same day
 is *not* a live change), and **writes the structured JSON from
 `references/subagent-contract.md` to that path with a Bash quoted heredoc**,
 verifies that it parses, then replies only `DONE` — results are never passed back
-as reply text, which drops and truncates them (§6a). **The Write tool must not be
-used for this**: in a subagent that call vanishes — no result, no error, no file
-— and the subagent cannot tell, so it cannot retry (§6a). It
+as reply text, which drops and truncates them (§6a). **The Write and Edit tools
+must not be used for this**: in a subagent either call vanishes — no result, no
+error, nothing on disk — and the subagent cannot tell, so it cannot retry. That
+includes repairing a result that failed its own parse check: the fix is another
+whole-file heredoc, never a patch (§6a). It
 must not write to the worklog. Days with no commits still write
 `has_changes:false`. A large day may fan out into Code Analysis Subagents grouped
 by work area, each writing to the manifest's `parts_dir` — never beside
@@ -439,6 +441,13 @@ git-worklog apply --preview-id <preview_id>
   a subagent that reached for the Write tool instead produces exactly this
   signature: no file, no error, and nothing in its reply that looks wrong. Do
   not write the result yourself to get past it, and do not re-run `prepare`.
+- **A day is `invalid` with `RESULT_NOT_JSON` and the subagent went quiet:** it
+  caught its own parse failure and then tried to patch the file with `Edit`,
+  which vanishes exactly like `Write`. The analysis is not lost — that subagent
+  still holds it. Tell it to rewrite the **whole** file with the same heredoc
+  (never `Edit`, never a patch) and to escape every `"` inside a JSON string,
+  which is the usual cause. Re-dispatching from scratch throws away work that is
+  one rewrite from being correct.
 - **Date exists but re-analysis finds no commits:** do not auto-delete the day
   file; show the diff, keep MANUAL, and require explicit confirmation to clear
   GENERATED.

@@ -99,15 +99,42 @@ class TestBothPromptTemplatesPinTheMechanism(unittest.TestCase):
                     "%s must show the closing delimiter on a line of its own; "
                     "an indented terminator does not end a heredoc." % name)
 
-    def test_the_write_tool_is_banned_outright(self):
+    def test_the_write_and_edit_tools_are_banned_outright(self):
         for name, template in _templates():
             with self.subTest(template=name):
                 self.assertIn(
-                    "MUST NOT use the Write tool", _flat(template),
-                    "%s must ban the Write tool by name. Stating the heredoc "
+                    "MUST NOT use the Write tool or the Edit tool",
+                    _flat(template),
+                    "%s must ban Write *and* Edit by name. Stating the heredoc "
                     "alone is not enough: the failure is silent, so a model "
                     "that tries Write first loses those turns and learns "
-                    "nothing." % name)
+                    "nothing. Edit matters just as much — it is what a subagent "
+                    "reaches for to repair a file that failed its own parse "
+                    "check, and it vanishes the same way." % name)
+
+    def test_the_repair_is_a_whole_file_rewrite(self):
+        # The failure this pins: verification catches a malformed result, the
+        # subagent opens Edit to fix the one bad line, the call vanishes, and a
+        # day that was one rewrite from correct stalls instead.
+        for name, template in _templates():
+            with self.subTest(template=name):
+                flat = _flat(template)
+                self.assertIn("never Edit", flat)
+                self.assertRegex(
+                    flat, r"(?i)(whole|entire) file again",
+                    "%s must say the repair is a whole-file heredoc rewrite, "
+                    "not a patch." % name)
+
+    def test_json_string_quotes_must_be_escaped(self):
+        # A heredoc passes text through literally, so a raw " inside a JSON
+        # string value ends it early. Observed in a real run: the result was
+        # 20KB of correct analysis that would not parse.
+        for name, template in _templates():
+            with self.subTest(template=name):
+                self.assertIn(
+                    'escaped as \\"', _flat(template),
+                    "%s must tell the subagent to escape double quotes inside "
+                    "JSON string values." % name)
 
     def test_the_subagent_verifies_what_it_wrote(self):
         for name, template in _templates():
@@ -143,7 +170,7 @@ class TestTheRationaleTravelsWithTheRule(unittest.TestCase):
         # a reference it may or may not open.
         skill = _flat(_read(SKILL_MD))
         self.assertIn("Bash quoted heredoc", skill)
-        self.assertIn("The Write tool must not be used", skill)
+        self.assertIn("The Write and Edit tools must not be used", skill)
 
 
 class TestTheFailedReplyIsDocumented(unittest.TestCase):
