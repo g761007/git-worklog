@@ -133,6 +133,30 @@ def mint_run(dates: "list[str]", run_dir: "str | None" = None) -> dict:
     }
 
 
+# Issues that mean "this could not be checked", not "this was found to be
+# false". They are reported but never fail a day: `analysis-pipeline.md` has
+# promised exactly that for EVIDENCE_UNVERIFIABLE since it was written, while
+# the code failed the day anyway.
+UNVERIFIED_CODES = {
+    "EVIDENCE_UNVERIFIABLE",
+    "EVIDENCE_FILE_NOT_TEXT",
+    "PROSE_SCOPE_TRUNCATED",
+}
+
+# `file_at` has three answers, not two: the file was there, it was not there, or
+# it was there but is not UTF-8 text. The third needs a value of its own --
+# returning ``None`` would report a real binary file as "no such file", and
+# decoding it strictly used to take the whole of `collect` down without naming
+# the commit or the path it died on.
+NOT_TEXT = object()
+
+# Above this many trees, `day_scope` stops searching every state the day passed
+# through and searches only its boundaries. One grep over 27 trees costs ~25s on
+# a 250k-line repository; the cost is linear in the tree count, and a day large
+# enough to pass this is a day where the answer is worth less than the wait.
+MAX_DAY_TREES = 50
+
+
 class Tree:
     """Reads files as they were at a commit, and remembers what it read.
 
@@ -149,10 +173,18 @@ class Tree:
         self._greps: dict = {}
         self._shallow = None
 
-    def _git(self, *args) -> "tuple[int, str]":
-        p = subprocess.run(["git", "-C", self.repo, *args],
-                           capture_output=True, text=True)
+    def _git_bytes(self, *args) -> "tuple[int, bytes]":
+        p = subprocess.run(["git", "-C", self.repo, *args], capture_output=True)
         return p.returncode, p.stdout
+
+    def _git(self, *args) -> "tuple[int, str]":
+        code, out = self._git_bytes(*args)
+        # Replacement rather than strict decoding: every caller here reads Git's
+        # own control output -- hashes, exit codes, matched tokens -- where one
+        # undecodable byte must not end the run. `file_at` is the single caller
+        # that reads *file content*, and it decodes strictly itself, because
+        # there "not text" is an answer rather than an accident.
+        return code, out.decode("utf-8", "replace")
 
     def is_shallow(self) -> bool:
         if self._shallow is None:
@@ -166,11 +198,19 @@ class Tree:
             self._commits[commit] = code == 0
         return self._commits[commit]
 
-    def file_at(self, commit: str, path: str) -> "str | None":
+    def file_at(self, commit: str, path: str):
+        """The file's text at that commit, ``None`` if absent, ``NOT_TEXT`` if
+        it is there but not UTF-8."""
         key = (commit, path)
         if key not in self._files:
-            code, out = self._git("show", f"{commit}:{path}")
-            self._files[key] = out if code == 0 else None
+            code, out = self._git_bytes("show", f"{commit}:{path}")
+            if code != 0:
+                self._files[key] = None
+            else:
+                try:
+                    self._files[key] = out.decode("utf-8")
+                except UnicodeDecodeError:
+                    self._files[key] = NOT_TEXT
         return self._files[key]
 
     def names_anything(self, token: str, trees: "tuple[str, ...]") -> bool:
@@ -201,25 +241,99 @@ class Tree:
             self._greps[key] = code == 0
         return self._greps[key]
 
-    def day_trees(self, commits: "list[str]") -> "tuple[str, ...]":
-        """The trees a day's prose may name: its start state and its end state.
+    def prime(self, tokens, trees: "tuple[str, ...]") -> None:
+        """Answer many tokens with one grep instead of one grep each.
 
-        Both, not just the end: a day that *deletes* `parse_legacy` describes it
-        correctly, and it is gone from the final tree. Checking only the end
-        would call every removal a fabrication.
+        `names_anything` asks the right question; asking it one token at a time
+        was the expense. ``-q`` makes a token that *is* present cheap (Git stops
+        at the first hit) and a token that is *absent* expensive (it scans
+        everything) -- so the loop paid most for exactly the tokens a false
+        report is made of. Measured on a 250k-line repository, one day of 27
+        commits and 128 tokens: 128 greps over 2 trees took 35s and missed 20
+        real names; one grep over all 28 trees took 25s and missed none.
+        Batching is what makes searching every state the day passed through
+        cheaper than searching two.
 
-        Middle states are not searched. A symbol created and deleted within the
-        same day is in neither tree and would be reported -- rare enough to
-        accept, and the run says which name it doubted, so a human can tell.
+        ``-o`` prints the matched text, and under ``-w -F`` that text is the
+        token itself, so Git's reply is simply the set of tokens that exist.
+        """
+        if not trees:
+            return
+        pending = [t for t in dict.fromkeys(tokens)
+                   if (t, trees) not in self._greps]
+        if not pending:
+            return
+        patterns = [arg for t in pending for arg in ("-e", t)]
+        code, out = self._git("grep", "-howFI", *patterns, *trees)
+        # 0 = matched, 1 = nothing matched, anything higher = Git refused. Only
+        # the first two are answers. On a refusal, leave the cache untouched so
+        # `names_anything` falls back to its own grep per token: recording
+        # "absent" here would turn one bad invocation into a page of
+        # fabrication reports against real code.
+        if code > 1:
+            return
+        present = set(out.split())
+        for token in pending:
+            self._greps[(token, trees)] = token in present
+
+    def _boundary_parents(self, commits: "list[str]") -> "list[str]":
+        """The day's starting states: parents of the day that the day excludes.
+
+        Plural, because a day can begin in more than one place. A day that
+        *deletes* `parse_legacy` describes it correctly and it is gone from
+        every tree the day ends in, so without the state before, every removal
+        reads as a fabrication.
+
+        Each output line begins with the commit's own full hash, so the set of
+        "inside" hashes is built from Git's own normalisation -- the caller's
+        list may be abbreviated, and comparing those against full parent hashes
+        would call every parent a boundary.
+        """
+        code, out = self._git("rev-list", "--no-walk", "--parents", *commits)
+        if code != 0:
+            return []
+        inside, parents = set(), []
+        for line in out.splitlines():
+            fields = line.split()
+            if fields:
+                inside.add(fields[0])
+                parents.extend(fields[1:])
+        return sorted({p for p in parents if p not in inside})
+
+    def _tips(self, commits: "list[str]") -> "list[str]":
+        """The day's end states: the commits no other day commit reaches."""
+        code, out = self._git("merge-base", "--independent", *commits)
+        return out.split() if code == 0 else list(commits)
+
+    def day_scope(self, commits: "list[str]") -> dict:
+        """Every tree the day's prose may be checked against.
+
+        The day's own commits plus the parents it started from -- *all* of its
+        commits, not its first and its last. Taking only the ends assumes the
+        day is one straight line of history, and a day that lands a branch is
+        not: in a real repository on 2026-08-27 two tips existed that were not
+        ancestors of one another, the later-committed one took the "last" slot,
+        and all 26 real symbols living on the other line were reported as
+        invented (issue #36).
+
+        Searching every state also closes the hole this used to document as
+        acceptable: a symbol created and deleted within the same day lives only
+        in a middle state, and middle states are now searched.
+
+        Past :data:`MAX_DAY_TREES` the scope narrows to the day's boundaries --
+        its starting states and its tips -- which is the old shape generalised
+        to every line rather than assumed to be one. That is reported, never
+        silent: a check that quietly stopped looking is how this began.
         """
         usable = [c for c in commits if c and self.has_commit(c)]
         if not usable:
-            return ()
-        first, last = usable[0], usable[-1]
-        code, _ = self._git("rev-parse", "--verify", "--quiet", f"{first}^")
-        # A root commit has no parent: the day starts from nothing, so its end
-        # state is the whole of it.
-        return (f"{first}^", last) if code == 0 else (last,)
+            return {"trees": (), "truncated": False, "commits": 0}
+        boundary = self._boundary_parents(usable)
+        full = tuple(boundary) + tuple(usable)
+        if len(full) <= MAX_DAY_TREES:
+            return {"trees": full, "truncated": False, "commits": len(usable)}
+        ends = tuple(boundary) + tuple(self._tips(usable))
+        return {"trees": ends, "truncated": True, "commits": len(usable)}
 
 
 def validate_evidence(entries, where: str, tree: "Tree | None" = None) -> "list[dict]":
@@ -289,6 +403,15 @@ def _verify_against_tree(e: dict, at: str, tree: Tree) -> "list[dict]":
         }]
 
     src = tree.file_at(commit, path)
+    if src is NOT_TEXT:
+        return [{
+            "code": "EVIDENCE_FILE_NOT_TEXT",
+            "message": f"{at} cites {path} at commit {commit}, which is there "
+                       f"but is not text, so its symbol and line range could "
+                       f"not be checked. Citing it is not an error; it simply "
+                       f"proves nothing.",
+            "path": at, "commit": commit, "file": path,
+        }]
     if src is None:
         return [{
             "code": "EVIDENCE_FILE_NOT_IN_COMMIT",
@@ -363,6 +486,40 @@ def cited_symbols(text: str) -> "list[str]":
                 seen.add(token)
                 out.append(token)
     return out
+
+
+def _all_prose_tokens(obj) -> "list[str]":
+    """Every symbol the whole result names, so one grep can answer them all.
+
+    Deliberately the same two functions `validate_prose` uses over the same two
+    key sets: a priming pass that asked a different question would leave the
+    tokens it missed to be greped one at a time, quietly restoring the cost it
+    exists to remove.
+    """
+    tokens: "list[str]" = []
+    for text in _prose_strings(obj, TOP_LEVEL_PROSE_KEYS):
+        tokens.extend(cited_symbols(text))
+    for item in obj.get("work_items") or []:
+        if isinstance(item, dict):
+            for text in _prose_strings(item, PROSE_KEYS):
+                tokens.extend(cited_symbols(text))
+    return tokens
+
+
+def _stamp(issues: "list[dict]") -> "list[dict]":
+    """Mark each issue blocking or unverified.
+
+    The line is "found to be false" against "could not be checked", and only
+    the first should stop a run. Failing a day because the clone was shallow,
+    or because a cited file is a `.docx`, punishes the subagent for the
+    environment -- and a day held back for a reason no re-analysis can fix is a
+    day whose correct work is thrown away and paid for again.
+    """
+    for issue in issues:
+        issue.setdefault("severity",
+                         "unverified" if issue.get("code") in UNVERIFIED_CODES
+                         else "blocking")
+    return issues
 
 
 def validate_prose(obj, keys: "list[str]", where: str, tree: "Tree | None",
@@ -516,10 +673,25 @@ def validate(obj, date: str, expected_language: "str | None" = None,
     """
     issues: "list[dict]" = []
     if not isinstance(obj, dict):
-        return [{"code": "RESULT_NOT_OBJECT",
-                 "message": "The result file must contain a JSON object."}]
+        return _stamp([{"code": "RESULT_NOT_OBJECT",
+                        "message": "The result file must contain a JSON "
+                                   "object."}])
 
-    trees = tree.day_trees(commits) if (tree and commits) else ()
+    scope = tree.day_scope(commits) if (tree and commits) else None
+    trees = scope["trees"] if scope else ()
+    if trees:
+        # One grep for the whole result, before anything asks about a token.
+        tree.prime(_all_prose_tokens(obj), trees)
+    if scope and scope["truncated"]:
+        issues.append({
+            "code": "PROSE_SCOPE_TRUNCATED",
+            "message": f"This day has {scope['commits']} commits, past the "
+                       f"{MAX_DAY_TREES}-tree limit, so only its starting "
+                       f"states and its tips were searched. A symbol that "
+                       f"existed only part-way through the day is neither "
+                       f"reported as missing nor confirmed.",
+            "commits": scope["commits"], "trees_searched": len(trees),
+        })
 
     issues.extend(_validate_language(obj, expected_language))
     issues.extend(validate_coverage(obj, required))
@@ -585,7 +757,7 @@ def validate(obj, date: str, expected_language: "str | None" = None,
             issues.extend(
                 validate_prose(item, PROSE_KEYS, f"work_items[{idx}]",
                                tree, trees))
-    return issues
+    return _stamp(issues)
 
 
 def read_run(run_dir: str, dates: "list[str]", repo: str,
@@ -616,6 +788,7 @@ def read_run(run_dir: str, dates: "list[str]", repo: str,
     results: "dict[str, dict]" = {}
     missing: "list[str]" = []
     invalid: "list[dict]" = []
+    unverified: "list[dict]" = []
 
     for date in dates:
         path = result_path(run_dir, date)
@@ -641,12 +814,17 @@ def read_run(run_dir: str, dates: "list[str]", repo: str,
         issues = validate(obj, date, expected_language, tree,
                           (required_by_date or {}).get(date),
                           (commits_by_date or {}).get(date))
-        if issues:
+        blocking = [i for i in issues if i["severity"] == "blocking"]
+        if blocking:
             invalid.append({"date": date, "path": path,
-                            "code": issues[0]["code"],
-                            "message": issues[0]["message"],
+                            "code": blocking[0]["code"],
+                            "message": blocking[0]["message"],
                             "issues": issues})
             continue
+        if issues:
+            # Checks that could not be run. The day stands, but silence here is
+            # how a validator starts lying about what it verified.
+            unverified.append({"date": date, "path": path, "issues": issues})
         results[date] = obj
 
     # Every day in a run must be written in one language (§6.2.8). When the
@@ -677,6 +855,7 @@ def read_run(run_dir: str, dates: "list[str]", repo: str,
         "degraded": degraded,
         "missing": missing,
         "invalid": invalid,
+        "unverified": unverified,
         "failed_dates": failed_dates,
         # A run is partial if any day failed to arrive, arrived malformed, or
         # reported its own status as partial/failed. Apply is blocked by default

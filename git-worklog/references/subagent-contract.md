@@ -566,8 +566,11 @@ explain it in `uncertainties[]` — do not pretend the analysis was completed.
 **The prose is checked too, not only `evidence[]`.** A code symbol you write in
 `` `backticks` `` inside `summary`, `implementation`, `behavior_change`, `impact`,
 `risks`, `maintenance_notes`, `follow_ups`, `handoff_notes` or `uncertainties`
-must exist somewhere in the day's own trees — `analyze collect` searches for it
-and fails the day (`PROSE_SYMBOL_NOT_FOUND`) if it does not. The worklog is
+must exist in some state the day passed through — `analyze collect` searches
+every one of the day's commits, plus the state each of its lines started from,
+and fails the day (`PROSE_SYMBOL_NOT_FOUND`) if the name is in none of them. So a
+name you describe as removed still counts, and so does one created and deleted
+within the same day. The worklog is
 written from these fields, so a name invented here is a fabrication in the
 product, not a stray note. This catches exactly the failure a self-report cannot:
 a run that returned `confidence: verified` while its prose named `PreviewStore`
@@ -709,13 +712,21 @@ OUTPUT
   exists in the checkout may not have existed at the commit you are citing.
 - The PROSE is checked too, not just evidence[]. Any code symbol you put in
   `backticks` inside summary, implementation, behavior_change, impact, risks,
-  maintenance_notes, follow_ups, handoff_notes or uncertainties must exist in the
-  day's own trees, or the day fails (PROSE_SYMBOL_NOT_FOUND). The worklog is
+  maintenance_notes, follow_ups, handoff_notes or uncertainties must exist in
+  some state the day passed through, or the day fails (PROSE_SYMBOL_NOT_FOUND).
+  The worklog is
   written from this prose, so `PreviewStore` or `read_config()` invented here is a
   fabrication in the product — a real run shipped both while reporting itself
   verified. Backtick only names you have read; if you mean one loosely, write
   plain words. A name you are describing as removed still counts as read — it is
-  in the day's starting tree.
+  in the state the day started from; so does one that was added and taken out
+  again on the same day, because every commit of the day is searched, not only
+  its first and its last.
+- CITING A BINARY FILE IS NOT AN ERROR, but it proves nothing. `analyze collect`
+  cannot read a .docx or a .png as text, so the `symbol` and `lines` of such a
+  citation cannot be checked: it is reported as unverified and the day still
+  passes. Coverage never asks for binary files either (§5). If a binary file
+  matters to the day, describe it in prose and cite the text that describes it.
 - A DELETION CANNOT BE CITED. The file is gone from the tree of the commit that
   deleted it, so {"commit": <the deleting commit>, "file": <the deleted file>}
   can never resolve. To evidence what the file was, cite it at a commit where it

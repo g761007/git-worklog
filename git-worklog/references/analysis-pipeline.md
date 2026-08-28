@@ -126,17 +126,41 @@ so a day cannot be dropped from the check by being left off a command line.
 
 - **Language** — the tag must be the one its manifest asked for.
 - **Evidence accuracy** — every `evidence[]` entry, and every `` `backtick` ``
-  symbol in the prose, is checked against the tree of the commit it cites: the
-  commit exists, the file existed *at that commit*, the symbol appears in it, the
-  `lines` range is inside it. A subagent that cites `migrate_directory` for a
-  function called `parse_legacy` has told you nothing you can follow (#15). On a
-  shallow clone, unreachable commits report `EVIDENCE_UNVERIFIABLE` rather than
-  failing the day — that is the runner's clone depth, not the subagent's fault.
+  symbol in the prose, is checked against the repository as it actually was.
+  Evidence is checked at the commit it cites: the commit exists, the file existed
+  *at that commit*, the symbol appears in it, the `lines` range is inside it. A
+  subagent that cites `migrate_directory` for a function called `parse_legacy`
+  has told you nothing you can follow (#15). Prose names no file, so a
+  `` `backtick` `` symbol is asked the weaker question — does this name exist at
+  all — against every state the day passed through: each of its commits, plus the
+  state each of its lines started from. Not its first and last commit: a day that
+  lands a branch has more than one line, and taking the ends of an assumed single
+  line reported 26 real symbols as invented (#36).
   Full rules: `references/subagent-contract.md` §8.
 - **Coverage** — every required file (§5) is mentioned somewhere.
   `COVERAGE_INCOMPLETE` names exactly which were not.
 
-If a day fails, **fix the analysis** — re-run that day's subagent against the
-same manifest and let it write its `result_path` again, then collect once more.
+Issues carry a `severity`, and the line between the two is **"found to be
+false"** against **"could not be checked"**. Only the first fails a day.
+`PROSE_SYMBOL_NOT_FOUND`, `EVIDENCE_SYMBOL_NOT_FOUND`, `EVIDENCE_COMMIT_UNKNOWN`,
+`EVIDENCE_LINES_OUT_OF_RANGE`, `COVERAGE_INCOMPLETE` and the schema checks are
+`blocking`. `EVIDENCE_UNVERIFIABLE` (a shallow clone), `EVIDENCE_FILE_NOT_TEXT`
+(a cited binary file) and `PROSE_SCOPE_TRUNCATED` (a day with more commits than
+the search will cover) are `unverified`: they are collected in `unverified[]`,
+printed by `collect`, carried into the preview's warnings — and the day passes.
+Failing a day for the runner's clone depth punishes the wrong party, and a day
+held back for a reason no re-analysis can fix costs the whole of that analysis
+to get back.
+
+If a day fails, ask which half failed before paying to fix it.
+
+- **The analysis is wrong, or never arrived** — re-run that day's subagent
+  against the same manifest and let it write its `result_path` again, then
+  collect once more. Never hand-edit a result.
+- **The tooling was wrong** — a validator bug, a repository the checks mis-read.
+  Re-running the subagent cannot help: the same correct analysis will fail the
+  same way. Fix the tool, then re-run `analyze collect` against the **same
+  `run_id`**. It re-reads the result files from disk and judges them again, so
+  nothing is analysed twice.
 Do **not** hand-edit the result file, and never paper over a gap with commit
 messages.
