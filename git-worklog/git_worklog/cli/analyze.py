@@ -321,9 +321,20 @@ def render_text(p: dict) -> str:
             lines.append(f"  {label:9}: {', '.join(p[label])}\n")
     for item in p.get("invalid", []):
         lines.append(f"  invalid  : {item['date']} — {item['message']}\n")
+    for item in p.get("unverified", []):
+        for issue in item["issues"]:
+            lines.append(f"  unchecked: {item['date']} — {issue['message']}\n")
     if p.get("language_inconsistent"):
         lines.append(f"  languages: {', '.join(p['languages_seen'])} — a run "
                      f"must use one\n")
-    lines.append("\n" + ("partial run: this cannot go to preview as-is\n"
-                         if p["partial_run"] else "run complete\n"))
+    unchecked = sum(len(i["issues"]) for i in p.get("unverified", []))
+    if p["partial_run"]:
+        tail = "partial run: this cannot go to preview as-is\n"
+    elif unchecked:
+        # Complete, but say so honestly: some checks could not be run, and a
+        # bare "run complete" would claim more than was verified.
+        tail = f"run complete — {unchecked} check(s) could not be run\n"
+    else:
+        tail = "run complete\n"
+    lines.append("\n" + tail)
     return "".join(lines)

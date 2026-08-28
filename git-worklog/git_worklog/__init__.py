@@ -33,7 +33,7 @@ PATH.
 # result failed its own parse check reached for Edit to fix the one bad line and
 # stalled there. Nothing in the interface moved -- the ban simply covers the tool
 # it always should have.
-__version__ = "1.2.1"
+__version__ = "1.2.2"
 
 # On-disk layout version of `.git-worklog/`, re-exported for convenience. It
 # describes the *data*, not the tool, and bumps only when a migration is needed.

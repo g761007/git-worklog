@@ -589,7 +589,10 @@ class TestShallowCloneCannotVerify(unittest.TestCase):
 
     def test_unreachable_commit_is_unverifiable_not_a_fabrication(self):
         # Failing the day here would blame the subagent for the runner's clone
-        # depth — and CI clones shallow by default.
+        # depth — and CI clones shallow by default. So the day is reported and
+        # kept, not failed: "could not be checked" is not "found to be false",
+        # and a day held back for a reason no re-analysis can fix costs the
+        # whole of that analysis to get back (#36).
         obj = _valid_result("2026-07-15", evidence=[
             {"commit": self.old, "file": "src/cache.py", "symbol": "get_0"}])
         with open(os.path.join(self.tmp, "2026-07-15.json"), "w",
@@ -599,9 +602,90 @@ class TestShallowCloneCannotVerify(unittest.TestCase):
                                ["read", "--run-dir", self.tmp,
                                 "--dates", "2026-07-15", "--repo", self.shallow])
         self.assertIsNotNone(d, err)
-        codes = [i["code"] for i in d["invalid"][0]["issues"]]
+        self.assertEqual(d["invalid"], [])
+        codes = [i["code"] for i in d["unverified"][0]["issues"]]
         self.assertIn("EVIDENCE_UNVERIFIABLE", codes)
         self.assertNotIn("EVIDENCE_COMMIT_UNKNOWN", codes)
+        self.assertIn("2026-07-15", d["results"])
+
+
+class TestBinaryEvidenceIsUnverifiableNotFatal(unittest.TestCase):
+    """A cited file that is not text (issue #36).
+
+    Reading it with ``text=True`` raised UnicodeDecodeError straight out of
+    `collect`, which reported one line of UNEXPECTED_ERROR and named neither
+    the commit nor the path -- so a day of correct analysis was blocked by a
+    `.docx` nobody could identify. The contract already leaves binary files out
+    of coverage, so citing one is not an error; it simply proves nothing.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.repo = tempfile.mkdtemp(prefix="rw_bin_repo_")
+        _git(cls.repo, "init", "-q", "-b", "main")
+        _git(cls.repo, "config", "user.email", "t@example.com")
+        _git(cls.repo, "config", "user.name", "Tester")
+        _write(cls.repo, "src/cache.py",
+               "class CacheLayer:\n    def get(self, key):\n        return key\n")
+        _write(cls.repo, "docs/report.docx",
+               b"PK\x03\x04\xc1\xff\x00\x01report\xfe\xfd", binary=True)
+        _git(cls.repo, "add", "-A")
+        _git(cls.repo, "commit", "-q", "-m", "add both")
+        cls.commit = subprocess.run(
+            ["git", "-C", cls.repo, "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True).stdout.strip()
+
+    @classmethod
+    def tearDownClass(cls):
+        rmtree(cls.repo)
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="rw_bin_run_")
+
+    def tearDown(self):
+        rmtree(self.tmp)
+
+    def _read(self, evidence):
+        obj = _valid_result("2026-07-15", evidence=evidence, work_items=[{
+            "title": "t", "summary": "s", "behavior_change": "b",
+            "implementation": "i", "impact": "im", "files": ["src/cache.py"],
+            "commits": [self.commit], "tests": [], "risks": [],
+            "maintenance_notes": [], "follow_ups": [],
+            "confidence": "verified", "evidence": [],
+        }])
+        with open(os.path.join(self.tmp, "2026-07-15.json"), "w",
+                  encoding="utf-8") as fh:
+            json.dump(obj, fh, ensure_ascii=False)
+        d, _, err = run_script("collect_day_results.py",
+                               ["read", "--run-dir", self.tmp,
+                                "--dates", "2026-07-15", "--repo", self.repo])
+        self.assertIsNotNone(d, err)
+        return d
+
+    def test_it_is_reported_without_failing_the_day(self):
+        d = self._read([{"commit": self.commit, "file": "docs/report.docx",
+                         "symbol": "risk_matrix"}])
+        self.assertEqual(d["invalid"], [])
+        self.assertFalse(d["partial_run"])
+        self.assertEqual([i["code"] for i in d["unverified"][0]["issues"]],
+                         ["EVIDENCE_FILE_NOT_TEXT"])
+        self.assertIn("2026-07-15", d["results"])
+
+    def test_the_report_names_the_commit_and_the_path(self):
+        # The old failure said "UNEXPECTED_ERROR" and nothing else, so nobody
+        # could tell which of a day's files had done it.
+        d = self._read([{"commit": self.commit, "file": "docs/report.docx"}])
+        message = d["unverified"][0]["issues"][0]["message"]
+        self.assertIn("docs/report.docx", message)
+        self.assertIn(self.commit, message)
+
+    def test_a_text_file_in_the_same_commit_is_still_checked(self):
+        # The tolerance is for undecodable content, not for evidence at large.
+        d = self._read([{"commit": self.commit, "file": "src/cache.py",
+                         "symbol": "store_get"}])
+        self.assertIn("EVIDENCE_SYMBOL_NOT_FOUND",
+                      [i["code"] for i in d["invalid"][0]["issues"]])
+        self.assertTrue(d["partial_run"])
 
 
 class TestInitReadRoundTrip(unittest.TestCase):

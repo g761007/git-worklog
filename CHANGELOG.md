@@ -6,6 +6,82 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-08-28
+
+### Fixed
+
+- **The prose check assumed a day is one straight line of history, and called
+  26 real symbols fabrications when it was not.** `Tree.day_trees` searched two
+  snapshots — the parent of the day's first commit and its last commit — which
+  describes a day correctly only while its commits form a single chain. A day
+  that lands a feature branch does not: on 2026-08-27 in a real repository the
+  day held two tips, neither an ancestor of the other, the manifest orders
+  commits by committer date, and the tip of the *other* line took the "last"
+  slot. The whole branch's final tree was never searched, so every name that
+  lived only there — `IPLivePlaybackSession`, `IPMediaPermissions`,
+  `IPLivePlayerAdapter` and 23 more — was reported as `PROSE_SYMBOL_NOT_FOUND`.
+  The day went `invalid`, the run went partial, `preview` refused it with
+  `RUN_NOT_COLLECTED`, and 250KB of entirely correct analysis could not be
+  written.
+
+  `day_trees` is now `day_scope`, and it searches **every state the day passed
+  through**: all of the day's commits, plus the state each of its lines started
+  from (parents of the day that the day itself does not contain). No assumption
+  about topology survives. That also closes the hole the old docstring accepted
+  as "rare enough" — a symbol created and deleted within the same day lives only
+  in a middle state, and middle states are now searched. The one measured day
+  that hit both goes from 108 of 128 tokens found to 128 of 128.
+
+- **Searching more trees is cheaper than searching two was.** The cost was never
+  the tree count; it was asking one token at a time. `-q` makes a token that is
+  present cheap and a token that is absent expensive, so the loop paid most for
+  exactly the tokens a false report is made of. `Tree.prime` now answers a whole
+  result with one `git grep -o`, and `validate` calls it before any token is
+  asked about. Measured on a 250k-line repository, one day of 27 commits and 128
+  tokens: 128 greps over 2 trees took 35s and missed 20 real names; one grep over
+  all 28 trees takes 25s and misses none. Past `MAX_DAY_TREES` (50) the scope
+  narrows to each line's start and tip — the old shape generalised to every line
+  instead of assuming there is one — and says so via `PROSE_SCOPE_TRUNCATED`
+  rather than quietly stopping.
+
+- **A cited binary file no longer takes the whole of `collect` down.** `Tree`
+  read `git show` with `text=True`, so a `.docx` in `evidence[]` raised
+  `UnicodeDecodeError` out of the collector, which reported one line of
+  `UNEXPECTED_ERROR` naming neither the commit nor the path. Git's output is now
+  read as bytes; `file_at` decodes strictly itself and returns `NOT_TEXT` for
+  content that is not UTF-8, which is reported as `EVIDENCE_FILE_NOT_TEXT` with
+  the commit and the path in the message. The contract already left binary files
+  out of coverage, so citing one was never an error — it just proves nothing.
+
+### Changed
+
+- **Issues now carry a `severity`, and only "found to be false" fails a day.**
+  `EVIDENCE_UNVERIFIABLE` (a shallow clone), `EVIDENCE_FILE_NOT_TEXT` and
+  `PROSE_SCOPE_TRUNCATED` are `unverified`: `read_run` collects them in a new
+  `unverified[]`, `collect` prints them, `preview` carries them into its
+  warnings, and the day passes. Everything else stays `blocking`.
+  `analysis-pipeline.md` had promised exactly this for `EVIDENCE_UNVERIFIABLE`
+  since it was written — "rather than failing the day", against code that failed
+  the day — so this makes a standing promise true rather than inventing a
+  policy. The reason it matters: a day held back for something no re-analysis
+  can fix costs the entire analysis to get back, and that price is what makes
+  hand-editing a result look reasonable.
+
+- **`SKILL.md` and `analysis-pipeline.md` now name the third way a day fails.**
+  Both told the orchestrator one thing for every failure: re-run that day's
+  subagent. That is right when the analysis is wrong and useless when the
+  *tooling* is — the same correct analysis fails the same way, and the only
+  honest move is to fix the tool and re-run `analyze collect` against the same
+  `run_id`, which re-reads the results from disk and judges them again without
+  re-analysing anything. A ban on hand-editing results with no exit was a ban
+  that got walked around under pressure.
+
+- **`subagent-contract.md` describes the search a Day Subagent is actually
+  measured against.** "The day's own trees" now says which trees, records that a
+  name added and removed on the same day still counts, and states that citing a
+  binary file is allowed but proves nothing. The rule has to reach the actor
+  executing it.
+
 ## [1.2.1] - 2026-08-07
 
 ### Fixed
@@ -922,7 +998,8 @@ satisfied.
 - A stdlib-only `unittest` suite and GitHub Actions CI on Python 3.9 / 3.12 / 3.13,
   with a `skill.zip` release artifact.
 
-[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/g761007/git-worklog/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/g761007/git-worklog/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/g761007/git-worklog/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/g761007/git-worklog/compare/v1.0.0...v1.1.0

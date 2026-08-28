@@ -296,7 +296,19 @@ or `unknown` date) blocks apply and exits `1`.
 A failed or missing day is **not** an empty one: never treat it as "nothing
 happened", never fall back to commit messages. Fix a failure by **re-running that
 day's subagent** against the same manifest, then collecting again — never
-hand-edit a result, never paper over a gap. Output fields and the check
+hand-edit a result, never paper over a gap.
+
+The one exception is a failure that belongs to the *tooling*, not the analysis —
+a validator bug, or a repository the checks mis-read. Re-running the subagent
+cannot fix that: the same correct analysis fails the same way. Fix the tool, then
+re-run `analyze collect` against the **same `run_id`** — it re-reads the results
+from disk and judges them again, so nothing is analysed twice. Reach for this
+only when you can name what was wrong with the check. It is the honest way out of
+a false failure, and it is why hand-editing a result is never the way out.
+
+Checks that could not be *run* — a shallow clone, a cited binary file, a day too
+large to search in full — do not fail a day at all: they are listed under
+`unverified`, printed, and the run stays complete. Output fields and the check
 mechanics: `references/analysis-pipeline.md` §6.
 
 Model per host is resolved by `--host` (cost-first defaults, single source
@@ -441,6 +453,11 @@ git-worklog apply --preview-id <preview_id>
   a subagent that reached for the Write tool instead produces exactly this
   signature: no file, no error, and nothing in its reply that looks wrong. Do
   not write the result yourself to get past it, and do not re-run `prepare`.
+- **A day is `invalid` and the analysis looks right:** read the issue codes
+  before re-dispatching anything. A validator that mis-reads the repository
+  fails a day the subagent got right, and re-running that subagent cannot fix
+  it — the same analysis will fail the same way. Fix the tool, then re-run
+  `analyze collect` against the same `run_id`.
 - **A day is `invalid` with `RESULT_NOT_JSON` and the subagent went quiet:** it
   caught its own parse failure and then tried to patch the file with `Edit`,
   which vanishes exactly like `Write`. The analysis is not lost — that subagent

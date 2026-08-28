@@ -339,7 +339,7 @@ def build(run_dir: str, entries: dict, repo: str = ".",
         # but silently dropping a day the user expected is not something to find
         # out after apply, so the number is put in front of them.
         "not_written": sorted(set(tasks["dates"]) - set(dates)),
-        "warnings": index["warnings"],
+        "warnings": _with_unverified(index["warnings"], collected),
     }
     return record
 
@@ -351,6 +351,21 @@ def _include_uncommitted(tasks: dict) -> bool:
 def _language_source(tasks: dict) -> "str | None":
     first = tasks["manifests"][tasks["dates"][0]]
     return (first.get("language") or {}).get("source")
+
+
+def _with_unverified(warnings: "list[dict]", collected: dict) -> "list[dict]":
+    """Carry the checks that could not be run through to the preview.
+
+    They do not block: "could not be checked" is not "found to be false". But a
+    preview that showed nothing of them would be the validator overstating what
+    it verified, which is the failure this whole layer exists to prevent.
+    """
+    out = list(warnings)
+    for day in collected.get("unverified", []):
+        for issue in day["issues"]:
+            out.append({"code": issue["code"],
+                        "message": f"{day['date']}: {issue['message']}"})
+    return out
 
 
 def _mint_id(now: datetime, days: "list[dict]", index: dict) -> str:
