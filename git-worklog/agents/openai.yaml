@@ -19,8 +19,7 @@ display_name: Git Worklog
 description: >-
   Maintain a per-day project worklog under .git-worklog/ from actual Git diffs
   and source-code changes, and answer questions from that worklog.
-version: 1.2.1
-
+version: 1.2.2
 # The skill body is the control layer; this manifest only carries metadata.
 entrypoint: SKILL.md
 command: /git-worklog
