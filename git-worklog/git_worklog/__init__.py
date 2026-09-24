@@ -33,7 +33,11 @@ PATH.
 # result failed its own parse check reached for Edit to fix the one bad line and
 # stalled there. Nothing in the interface moved -- the ban simply covers the tool
 # it always should have.
-__version__ = "1.3.0"
+#
+# 1.3.1 is a patch on the reading that `view`'s page is output, not interface: no
+# command, flag or JSON field changed. The light/dark switch and the copy badges
+# are the parts of 1.3.0's page that should have shipped with it.
+__version__ = "1.3.1"
 
 # On-disk layout version of `.git-worklog/`, re-exported for convenience. It
 # describes the *data*, not the tool, and bumps only when a migration is needed.

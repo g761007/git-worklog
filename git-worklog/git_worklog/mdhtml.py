@@ -16,6 +16,15 @@ code, inline code, ``**bold**``, ``*italic*`` and http(s) links. Anything else
 breaks kept. That is the safe way to be incomplete: an unsupported construct
 reads a little plainer, it never runs.
 
+Commit hashes become badges, because a worklog is mostly read to get from a
+sentence to the commit behind it: a ``<button>`` the page's script copies to
+the clipboard, or a plain ``<span>`` inside something that is itself a link. A
+token counts when it mixes digits and letters, or when it is written as the
+format's own commit reference, ``<hash> (<author>)`` (worklog-format.md §3). The
+first rule keeps numbers and all-hex words ("defaced") plain; the second catches
+the hashes that happen to be all digits, four of 91 in this repository's own
+worklog.
+
 Two omissions are deliberate:
 
 - ``_underscore_`` emphasis. Worklogs name identifiers such as
@@ -47,6 +56,11 @@ _AUTOLINK_RE = re.compile(r"<(https?://[^\s<>]+)>", re.IGNORECASE)
 _STRONG_RE = re.compile(r"\*\*(?=\S)(.+?)(?<=\S)\*\*")
 _EM_RE = re.compile(r"(?<!\*)\*(?=[^\s*])([^*]+?)(?<=[^\s*])\*(?!\*)")
 _DAY_LINK_RE = re.compile(r"^(?:\.{1,2}/)*(?:days/)?(\d{4}-\d{2}-\d{2})\.md$")
+# 7-40 lowercase hex characters not glued to a path, an identifier or a colour.
+# ASCII boundaries rather than \b, which treats CJK as word characters and would
+# miss a hash written directly against Chinese text.
+_HASH_RE = re.compile(r"(?<![0-9A-Za-z_./#-])[0-9a-f]{7,40}(?![0-9A-Za-z_-])")
+_AUTHOR_AFTER_RE = re.compile(r"\s*[(（][^()（）\n]{1,80}[)）]")
 # Placeholders are NUL-delimited, and NUL is stripped from every input first,
 # so text can never forge one.
 _SLOT_RE = re.compile("\x00(\\d+)\x00")
@@ -76,7 +90,7 @@ def inline(text: str, *, dates=frozenset(), links: bool = True) -> str:
 
     ``dates`` are the day files a relative ``<date>.md`` link may be rewritten
     to. ``links=False`` keeps link text and drops the link, for places that are
-    themselves inside a link.
+    themselves inside a link; commit hashes there are badges that do nothing.
     """
     slots: "list[str]" = []
 
@@ -104,10 +118,21 @@ def inline(text: str, *, dates=frozenset(), links: bool = True) -> str:
             return slot(shown)
         return slot(f'<a href="{html.escape(m.group(1))}"{_EXTERNAL}>{shown}</a>')
 
+    def commit(m):
+        token = m.group(0)
+        mixed = any(c.isdigit() for c in token) and any(c.isalpha() for c in token)
+        if not mixed and not _AUTHOR_AFTER_RE.match(m.string, m.end()):
+            return token            # a number, or a word such as "defaced"
+        if not links:
+            return slot(f'<span class="hash">{token}</span>')
+        return slot(f'<button type="button" class="hash" data-hash="{token}" '
+                    f'title="Copy {token}">{token}</button>')
+
     text = _CODE_RE.sub(code, _clean(text))
     text = _IMAGE_RE.sub(image, text)
     text = _LINK_RE.sub(link, text)
     text = _AUTOLINK_RE.sub(autolink, text)
+    text = _HASH_RE.sub(commit, text)   # last: never inside code, a link or its URL
     text = _emphasis(html.escape(text, quote=False))
     # A link label can hold a code span, so a slot can hold a slot.
     while _SLOT_RE.search(text):
