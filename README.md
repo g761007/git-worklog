@@ -638,7 +638,7 @@ Content-Security-Policy 只允許它自己那一支 script 執行、不允許載
 隱藏目錄，放在 `~/.git-worklog/` 的頁面會顯示「存取遭拒」：請寫到看得見的位置。而在
 沒有顯示環境的機器上，`view` 會寫出頁面並回報 `opened: false`，不會啟動終端機瀏覽器。
 
-報告、遷移、清理等指令會隨 CLI 成長陸續加入，目前仍在 skill 內。
+更多指令——清理（cleanup）、初始化（init）——會隨 CLI 成長陸續加入，目前仍在 skill 內。
 
 ### 使用方式
 

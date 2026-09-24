@@ -3,14 +3,10 @@
 The canonical names for this project. Anything that names the product, the
 skill, the CLI, the package, or a data directory must match this document.
 
-The project was originally called `repo_worklog_skill` and is being renamed to
-**Git Worklog** over the v1.0 refactor. Because that rename lands across several
-PRs, each name below is marked with its current state:
-
-- **Active** — in effect now; use it.
-- **Planned** — the target name; the old name is still what the code and docs
-  use today. Do not "fix" these ahead of their PR, or the rename lands
-  half-applied and nothing works.
+The project was originally called `repo_worklog_skill` and was renamed to
+**Git Worklog** over the v1.0 refactor, which shipped as v1.0.0. Every name below
+is **Active** — in effect now; use it. (While the rename landed across several
+PRs, names it had not reached yet were marked Planned. None is left.)
 
 ## Product
 
@@ -51,8 +47,10 @@ skill ships.)
 | Command | `git-worklog` — Active |
 | Module form | `python3 -m git_worklog` — Active |
 
-Implemented: `version`, `doctor`, `validate`. Planned: `init`, `generate`,
-`report`, `preview`, `apply`, `migrate`, `clean`.
+Subcommands: `version`, `doctor`, `validate`, `analyze` (`prepare` / `collect`),
+`preview`, `apply`, `coverage`, `refs`, `report`, `migrate`, `reindex`, `view`.
+Roadmap §2.4 also lists `init`, `generate` and `clean`, which do not exist;
+generating a worklog is `analyze`, `preview` and `apply`, driven by the skill.
 
 The console script exists only after `pip install`. The module form works
 straight from the skill directory with nothing installed, which is how the skill
@@ -71,8 +69,9 @@ underscore form is correct.
 The package sits **inside** the skill directory rather than beside it, so that
 copying `git-worklog/` into a host's skills folder yields a working skill with
 nothing installed. `pyproject.toml` maps the package root there, so the same
-code is also pip-installable. (Roadmap §3 draws them as siblings; that split is
-PR 7's, and it must not cost the copy-to-install property.)
+code is also pip-installable. (Roadmap §3 drew them as siblings under a `skill/`
+directory; §3.1 records why that split was dropped — it would have cost exactly
+this copy-to-install property. `git-worklog/` is the final layout.)
 
 ## Directories
 
@@ -86,7 +85,8 @@ PR 7's, and it must not cost the copy-to-install property.)
 
 The pre-v0.6 project output was a flat `PROJECT_WORKLOG/` with day files at its
 root. It is still **readable** — `detect_layout()` probes for it — but not
-writable; `migrate_legacy_worklog.py --from-dir` converts it.
+writable; `git-worklog migrate --from-dir` converts it (a dry-run until
+`--apply`).
 
 ## File markers
 
@@ -117,12 +117,11 @@ thing the model resolver exists to prevent.
 
 ## Versions
 
-Distinct numbers that are easy to confuse. See issue #12 for giving the product
-version a single source of truth and shipping v1.0.0.
+Distinct numbers that are easy to confuse.
 
 | | |
 | --- | --- |
-| Product / release version | `openai.yaml` `version:`, git tags, CHANGELOG — currently `0.4.0` |
+| Product / release version | `git_worklog/__init__.py` `__version__` — the single source (issue #12). `pyproject.toml` reads it, `tests/test_version.py` pins `agents/openai.yaml` to it, and tags and the CHANGELOG follow it |
 | Data-directory layout | `.git-worklog/VERSION` — currently `1` |
 | Config schema | `config.json` `schema_version` — currently `1` |
 
@@ -146,7 +145,6 @@ product names. They remain, correctly, in:
 
 - released CHANGELOG entries and git tags v0.1.0–v0.4.0 (history is not
   rewritten),
-- paths and identifiers that a Planned rename above has not reached yet,
 - the legacy names the tool must still **recognise** to migrate an old worklog:
   `PROJECT_WORKLOG/`, `docs/PROJECT_WORKLOG.md`, and the `REPO_WORKLOG` marker
   prefix. These are load-bearing — deleting them breaks migration for every
