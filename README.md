@@ -124,10 +124,34 @@ and runs on the standard library alone.
 
 The same engine also ships a `git-worklog` command. **The skill does not need
 it** — it is for driving the deterministic parts yourself, from a terminal or
-from CI:
+from CI.
+
+The package is defined by the repository's root `pyproject.toml`, not by
+anything inside the skill folder, so install it from the repository: a copy of
+the skill, or `skill.zip`, has nothing to install. With
+[uv](https://docs.astral.sh/uv/), which gives the command an environment of its
+own and puts it on your PATH:
 
 ```bash
-pip install .          # from a clone; puts `git-worklog` on PATH
+uv tool install "git+https://github.com/g761007/git-worklog@v1.3.0"
+```
+
+Put the release you want in the tag (see
+[Releases](https://github.com/g761007/git-worklog/releases)); leave it off to
+track `main`. To upgrade, run the same command with the new tag and `--force`.
+From a clone, `uv tool install .` installs the working tree, uncommitted edits
+included. With pip, use a virtual environment — uv's `pip`, and the
+externally managed Pythons of Homebrew and Debian, refuse `pip install .`
+outside one:
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install .
+```
+
+Once `git-worklog` is on your PATH, Git runs it as `git worklog` as well. The
+commands:
+
+```bash
 git-worklog version    # CLI / layout / config-schema versions
 git-worklog doctor     # is this environment able to run the tool?
 git-worklog validate   # is the worklog on disk well-formed?
@@ -137,10 +161,11 @@ git-worklog apply      # write a frozen preview
 git-worklog view       # read the worklog as one web page (read-only)
 ```
 
-Without installing, the same commands run straight from the skill folder:
+Without installing, the same commands run straight from the skill folder —
+`git-worklog` here, or wherever you copied the skill:
 
 ```bash
-PYTHONPATH=git-worklog python3 -m git_worklog doctor --text
+PYTHONPATH=git-worklog python3 -m git_worklog --text doctor
 ```
 
 Each prints one JSON object (`--text` for a human-readable rendering). Exit `0`
@@ -200,6 +225,10 @@ them cannot interleave.
 an overview with counts, an activity calendar and a timeline; every day with its
 summary, a table of contents and collapsible work-item cards; and search across
 all of it.
+
+![The overview: counts, an activity calendar shaded by work items per day, and a timeline of every day's summary](docs/images/view-overview.png)
+
+![One day: its summary, a table of contents, and every work item as a card with its field labels](docs/images/view-day.png)
 
 ```bash
 git-worklog view                          # from the repository root
@@ -551,10 +580,29 @@ ln -s "$(pwd)/git-worklog" ~/.claude/skills/git-worklog
 ### CLI（選用）
 
 同一套引擎另外提供 `git-worklog` 指令。**skill 不需要它**——它是給你在終端機或 CI
-裡自行驅動確定性部分用的：
+裡自行驅動確定性部分用的。
+
+這個套件是由 repo 根目錄的 `pyproject.toml` 定義的，不在 skill 資料夾裡，所以要從
+repo 安裝：skill 的複本或 `skill.zip` 裡沒有可以安裝的東西。建議用
+[uv](https://docs.astral.sh/uv/)，它會替這個指令建立獨立的環境，並放進你的 PATH：
 
 ```bash
-pip install .          # 從 clone 安裝，把 `git-worklog` 放進 PATH
+uv tool install "git+https://github.com/g761007/git-worklog@v1.3.0"
+```
+
+tag 填你要的版本（見 [Releases](https://github.com/g761007/git-worklog/releases)）；
+不加 tag 則會安裝 `main`。要升級時，換成新的 tag 並加上 `--force` 重跑即可。在 clone
+裡執行 `uv tool install .` 會安裝工作目錄的內容，包含尚未 commit 的修改。若用 pip，
+請先建立虛擬環境——uv 的 `pip`，以及 Homebrew、Debian 這類 externally managed 的
+Python，都會拒絕在虛擬環境以外執行 `pip install .`：
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install .
+```
+
+`git-worklog` 進入 PATH 之後，Git 也能以 `git worklog` 執行它。可用的指令：
+
+```bash
 git-worklog version    # CLI／佈局／設定 schema 版本
 git-worklog doctor     # 這個環境跑得動嗎？
 git-worklog validate   # 磁碟上的工作日誌格式正確嗎？
@@ -564,10 +612,11 @@ git-worklog apply      # 寫入某份已凍結的 preview
 git-worklog view       # 以單一網頁閱讀工作日誌（唯讀）
 ```
 
-不安裝的話，同樣的指令可直接從 skill 資料夾執行：
+不安裝的話，同樣的指令可直接從 skill 資料夾執行——這裡是 `git-worklog`，或你複製
+skill 過去的位置：
 
 ```bash
-PYTHONPATH=git-worklog python3 -m git_worklog doctor --text
+PYTHONPATH=git-worklog python3 -m git_worklog --text doctor
 ```
 
 每個指令輸出單一 JSON 物件（`--text` 可切成人類可讀格式）。離開碼 `0` 表示正常、
@@ -618,6 +667,10 @@ git-worklog apply --preview-id <preview_id>
 `view` 是唯一一個「給人讀」而不是給流程用的指令。它把 `.git-worklog/` 渲染成一個自含
 的 HTML 頁面並用瀏覽器開啟：總覽（統計、活動日曆、時間軸）、每一天的摘要、目錄與可收合
 的工作項目卡片，以及跨所有日誌的搜尋。
+
+![總覽：統計、依每日工作項目數著色的活動日曆，以及每一天摘要的時間軸](docs/images/view-overview.png)
+
+![單日頁：當日摘要、本日目錄，以及每個工作項目的卡片與欄位標籤](docs/images/view-day.png)
 
 ```bash
 git-worklog view                          # 在 repo 根目錄執行
