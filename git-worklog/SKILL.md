@@ -512,4 +512,5 @@ is the whole surface you need; there is nothing in `scripts/` that is not here.
 | `reindex` | Rebuild `index.md` from the day files. Normal runs never need it — `apply` does it — but it is the repair for `INDEX_WRITE_FAILED` |
 | `doctor` | Is this environment able to run the tool? |
 | `validate` | Is the worklog on disk well-formed? Day markers, index links, config, language stamps |
+| `view` | Render the worklog as one self-contained HTML page and open it in the browser. Read-only; for the user to read, never a step of a flow |
 | `version` | CLI / layout / config-schema versions |
