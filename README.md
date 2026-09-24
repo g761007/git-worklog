@@ -134,6 +134,7 @@ git-worklog validate   # is the worklog on disk well-formed?
 git-worklog analyze    # prepare per-day analysis tasks, and collect them back
 git-worklog preview    # freeze what an apply would write
 git-worklog apply      # write a frozen preview
+git-worklog view       # read the worklog as one web page (read-only)
 ```
 
 Without installing, the same commands run straight from the skill folder:
@@ -193,6 +194,36 @@ day file, `index.md`, the analysis results, the project's language — apply
 refuses and says which, rather than writing something close enough. Previews
 expire after 24 hours, apply exactly once, and take a per-worklog lock so two of
 them cannot interleave.
+
+`view` is the one command for reading rather than for the pipeline. It renders
+`.git-worklog/` into one self-contained HTML page and opens it in your browser:
+an overview with counts, an activity calendar and a timeline; every day with its
+summary, a table of contents and collapsible work-item cards; and search across
+all of it.
+
+```bash
+git-worklog view                          # from the repository root
+git-worklog view --no-open                # write the page, start no browser
+git-worklog view --output handoff.html    # a copy to hand over
+```
+
+It is read-only — nothing in the repository or the worklog is written — and it
+calls no git, so its numbers describe the worklog, not the repository: *commits
+cited* is what the prose mentions, and an empty calendar cell means "no day
+file", which is what a day nobody logged and a day without commits both look
+like (`coverage` is the command that tells them apart). The page goes to
+`~/.git-worklog/view/` under a name fixed per worklog, so re-running the command
+and reloading the tab refreshes it. It embeds the whole worklog, so it is
+written owner-only; share an `--output` copy only where the source may be read.
+Everything a day file says is escaped before it is shown, and the page's
+Content-Security-Policy lets its one script run and nothing load, so a worklog
+that quotes `<script>` shows the text.
+
+Two environments need `--output`. The Snap builds of Firefox and Chromium (the
+Ubuntu defaults) cannot read hidden directories in your home, so a page under
+`~/.git-worklog/` opens as "access denied": write it somewhere visible. And on a
+machine with no display, `view` writes the page and reports `opened: false`
+rather than starting a terminal browser.
 
 More commands — cleanup, init — arrive as the CLI grows; today those live in the
 skill.
@@ -318,6 +349,7 @@ your repositories — `~/.git-worklog/`, or wherever `$GIT_WORKLOG_HOME` points:
 | `analysis/<run_id>/tasks/` | one manifest per day: what to analyse, in which language, which files are required |
 | `analysis/<run_id>/results/` | what each Day Subagent concluded |
 | `previews/` | the exact final text of every file a pending apply would write |
+| `view/` | the pages `git-worklog view` writes, rebuilt from the worklog on every run |
 
 **Nothing here is ever deleted automatically.** A preview past its 24h TTL stops
 being applicable but stays on disk, and every run's manifests and results are
@@ -529,6 +561,7 @@ git-worklog validate   # 磁碟上的工作日誌格式正確嗎？
 git-worklog analyze    # 建立每日分析任務，再把結果收回來驗證
 git-worklog preview    # 凍結這次 apply 會寫入的全部內容
 git-worklog apply      # 寫入某份已凍結的 preview
+git-worklog view       # 以單一網頁閱讀工作日誌（唯讀）
 ```
 
 不安裝的話，同樣的指令可直接從 skill 資料夾執行：
@@ -581,6 +614,29 @@ git-worklog apply --preview-id <preview_id>
 `index.md`、分析結果、專案語言設定——apply 就會拒絕並指出是哪一項，而不是寫入一份
 「差不多」的內容。Preview 24 小時後過期、只能套用一次，並且會取得 per-worklog 鎖，
 避免兩次 apply 交錯。
+
+`view` 是唯一一個「給人讀」而不是給流程用的指令。它把 `.git-worklog/` 渲染成一個自含
+的 HTML 頁面並用瀏覽器開啟：總覽（統計、活動日曆、時間軸）、每一天的摘要、目錄與可收合
+的工作項目卡片，以及跨所有日誌的搜尋。
+
+```bash
+git-worklog view                          # 在 repo 根目錄執行
+git-worklog view --no-open                # 只寫出頁面，不開瀏覽器
+git-worklog view --output handoff.html    # 匯出一份交接用的副本
+```
+
+它是唯讀的——不寫 repo、也不寫工作日誌——而且不呼叫 git，所以頁面上的數字描述的是
+日誌，不是 repo：*commits cited* 是日誌文字提到的 commit；日曆上的空格代表「沒有日期
+檔」，而「沒人記錄的那天」和「沒有 commit 的那天」看起來正是這個樣子（要分辨兩者請用
+`coverage`）。頁面寫到 `~/.git-worklog/view/`，每個工作日誌固定同一個檔名，所以重跑
+指令後重新整理分頁即可更新。頁面內含整份日誌，因此只有擁有者可讀；用 `--output` 匯出
+的副本，只該分享給本來就能讀原始碼的人。日期檔的所有內容在顯示前都會先跳脫，頁面的
+Content-Security-Policy 只允許它自己那一支 script 執行、不允許載入任何東西，所以引用了
+`<script>` 的日誌只會顯示成文字。
+
+有兩種環境需要 `--output`。Ubuntu 預設的 Snap 版 Firefox／Chromium 讀不到家目錄下的
+隱藏目錄，放在 `~/.git-worklog/` 的頁面會顯示「存取遭拒」：請寫到看得見的位置。而在
+沒有顯示環境的機器上，`view` 會寫出頁面並回報 `opened: false`，不會啟動終端機瀏覽器。
 
 報告、遷移、清理等指令會隨 CLI 成長陸續加入，目前仍在 skill 內。
 
@@ -693,6 +749,7 @@ skill 會明講並詢問是否先補齊——**絕不默默降級成摘要 commi
 | `analysis/<run_id>/tasks/` | 每天一份 manifest：要分析什麼、用什麼語言、哪些檔案必須交代 |
 | `analysis/<run_id>/results/` | 每個 Day Subagent 的分析結果 |
 | `previews/` | 待套用的 apply 會寫入的每個檔案的完整最終內容 |
+| `view/` | `git-worklog view` 寫出的頁面，每次執行都從工作日誌重新產生 |
 
 **這裡的東西永遠不會被自動刪除。** 超過 24 小時 TTL 的 preview 只是不再能套用，檔案仍
 留在磁碟上；每次執行的 manifest 與結果也是刻意保留的——幾個月後看到一段讀起來奇怪的

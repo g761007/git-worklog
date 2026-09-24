@@ -6,6 +6,38 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-24
+
+### Added
+
+- **`git-worklog view` shows the worklog as a web page.** It renders
+  `.git-worklog/` into one self-contained HTML file — an overview with counts,
+  an activity calendar and a timeline; every day with its summary, a table of
+  contents and collapsible work-item cards; and search across all of it — and
+  opens it in the browser. It is read-only and calls no git: the page is
+  derived from the day files alone, which is why its calendar can only say "no
+  day file", never "no work". A gap and a day without commits look the same
+  until something checks them against git, and `coverage` is what does.
+
+  Days are read by structure, never by the words of their headings, because
+  those are written in each run's language: a day is cut on `##` and `###`
+  outside code fences, its lead is the first paragraph of its first section
+  (with or without SUMMARY markers), and its commits are counted by the same
+  scan `report` uses, so the two cannot disagree about what a day cites. The
+  day header's Branch/HEAD is not shown — it records the run that wrote the
+  file, and two days analysed together carry the same HEAD.
+
+  Nothing a day file says becomes markup. The renderer (`mdhtml`) escapes every
+  character first and adds only its own tags for the constructs the format
+  uses; links survive only as http(s) or as the worklog's own day files. The
+  page's Content-Security-Policy allows its one script by hash and no network
+  access, as a backstop. The page lands in `~/.git-worklog/view/` (owner-only,
+  since it embeds the whole worklog) under a name fixed per worklog, or at
+  `--output`, which is refused inside the worklog directory; `--no-open` skips
+  the browser. A browser's own output is kept off stdout so the JSON contract
+  holds, and on Linux with no display no browser is started at all — Python
+  would otherwise run a terminal browser in the foreground.
+
 ## [1.2.2] - 2026-08-28
 
 ### Fixed
@@ -998,7 +1030,8 @@ satisfied.
 - A stdlib-only `unittest` suite and GitHub Actions CI on Python 3.9 / 3.12 / 3.13,
   with a `skill.zip` release artifact.
 
-[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/g761007/git-worklog/compare/v1.2.2...v1.3.0
 [1.2.2]: https://github.com/g761007/git-worklog/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/g761007/git-worklog/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/g761007/git-worklog/compare/v1.1.0...v1.2.0

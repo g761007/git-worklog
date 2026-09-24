@@ -57,10 +57,10 @@ class TestOneSourceOfTruth(unittest.TestCase):
             "agents/openai.yaml version has drifted from git_worklog.__version__ "
             "— bump both, or the packaged skill and the installed CLI disagree.")
 
-    def test_this_release_is_one_point_two_two(self):
+    def test_this_release_is_one_point_three(self):
         # Pins the actual ship. When the next release bumps __version__, this and
         # the YAML move together or the suite goes red — which is the reminder.
-        self.assertEqual(__version__, "1.2.2")
+        self.assertEqual(__version__, "1.3.0")
 
 
 class TestDataVersionsStayIndependent(unittest.TestCase):

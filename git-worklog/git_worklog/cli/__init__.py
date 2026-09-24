@@ -10,7 +10,8 @@ turns a collected run plus the agent's prose into a frozen payload, the second
 writes that payload and takes no other input. ``coverage`` and ``refs`` serve
 report mode's two questions — "is there an analysis behind these dates?" and
 "which commits is this version actually made of?" — and ``migrate`` (§2.4) moves
-a legacy worklog into the current layout.
+a legacy worklog into the current layout. ``view`` is for reading what all of
+that produced: the worklog as one self-contained page in a browser, read-only.
 
 Every subcommand prints one JSON object to stdout, matching the scripts'
 contract, so the same parsing works everywhere. ``--text`` switches to a
@@ -303,6 +304,18 @@ def build_parser() -> argparse.ArgumentParser:
                          "exist yet. An index that already has one keeps it.")
     ri.add_argument("--apply", action="store_true",
                     help="Write index.md. Without this the run is a dry-run.")
+
+    vw = sub.add_parser("view",
+                        help="Show the worklog as one HTML page in a browser "
+                             "(read-only).")
+    vw.add_argument("--repo", default=".", help="Repository to show (default: cwd).")
+    vw.add_argument("--dir", help=f"Worklog directory (default: <repo>/{wm.WORKLOG_DIRNAME}).")
+    vw.add_argument("--output", metavar="FILE",
+                    help="Where to write the page (default: ~/.git-worklog/view/"
+                         "<project>-<hash>.html, the same file every run). "
+                         "Refused inside the worklog directory.")
+    vw.add_argument("--no-open", action="store_true",
+                    help="Write the page without opening a browser.")
     return p
 
 
@@ -340,6 +353,8 @@ def main(argv: "list[str] | None" = None) -> int:
         from git_worklog.cli import migrate as cmd
     elif args.command == "reindex":
         from git_worklog.cli import reindex as cmd
+    elif args.command == "view":
+        from git_worklog.cli import view as cmd
     else:
         raise AssertionError(f"no module wired for command {args.command!r}")
 

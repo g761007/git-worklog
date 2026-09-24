@@ -28,6 +28,9 @@ ANALYSIS_SUBDIR = "analysis"
 # outliving its process is a bug to detect, not state to keep -- so they sit in
 # tmp/ rather than earning a directory of their own.
 TMP_SUBDIR = "tmp"
+# Pages written by `git-worklog view`. Derived from a worklog on every run, so
+# deleting them loses nothing: the next `view` writes them again.
+VIEW_SUBDIR = "view"
 
 # Owner-only: these files quote source code and diffs from private repositories.
 DIR_MODE = 0o700
@@ -56,6 +59,10 @@ def analysis_dir() -> str:
 
 def tmp_dir() -> str:
     return os.path.join(home(), TMP_SUBDIR)
+
+
+def view_dir() -> str:
+    return os.path.join(home(), VIEW_SUBDIR)
 
 
 def ensure_dir(path: str) -> str:
