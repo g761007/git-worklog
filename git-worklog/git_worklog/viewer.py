@@ -28,7 +28,7 @@ never lets input become markup. The page's Content-Security-Policy then allows
 exactly one script, by hash, and no network access at all -- a backstop, so an
 escape that was ever missed still could not run or send anything anywhere.
 Navigation is CSS (``:target``), so the page reads fully without the script;
-the script adds search and keyboard shortcuts only.
+the script adds search, keyboard shortcuts and the light/dark switch.
 """
 
 from __future__ import annotations
@@ -270,9 +270,17 @@ def _page(project: str, root: str, days: "list[Day]", notes: str,
     body = "".join([
         '<header class="top">',
         '<a class="brand" href="#overview">Git Worklog</a>',
-        '<input id="q" type="search" placeholder="Search the worklog" '
-        'aria-label="Search the worklog" autocomplete="off" spellcheck="false">',
-        '<kbd class="hint">/</kbd>',
+        '<input id="q" type="search" placeholder="Search the worklog (press /)" '
+        'aria-label="Search the worklog" aria-keyshortcuts="/" autocomplete="off" '
+        'spellcheck="false">',
+        '<button id="theme" class="theme" type="button" aria-label="Switch theme" '
+        'title="Switch theme">'
+        '<svg class="moon" viewBox="0 0 24 24" aria-hidden="true">'
+        '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>'
+        '<svg class="sun" viewBox="0 0 24 24" aria-hidden="true">'
+        '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4'
+        'M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>'
+        '</button>',
         "</header>",
         '<div class="layout">',
         _sidebar(days),
@@ -292,9 +300,10 @@ def _page(project: str, root: str, days: "list[Day]", notes: str,
             '<meta name="referrer" content="no-referrer">\n'
             f"<title>{_e(project)} · Git Worklog</title>\n"
             f"<style>{_CSS}</style>\n"
+            # In <head>, so a remembered theme applies before the body paints.
+            f"<script>{_JS}</script>\n"
             "</head>\n<body>\n"
             f"{body}\n"
-            f"<script>{_JS}</script>\n"
             "</body>\n</html>\n")
 
 
@@ -487,9 +496,20 @@ def _day(d: Day, older: "str | None", newer: "str | None", root: str,
 # that silently stops shipping, and a module cannot be left out of the wheel or
 # skill.zip without the import failing loudly.
 
+# The dark palette. It applies while the system prefers dark and the reader
+# has not picked light, and whenever the reader has picked dark: one list for
+# both, so the two cannot drift apart.
+_DARK = """
+    color-scheme: dark;
+    --bg: #161615; --panel: #1e1e1c; --line: #34322e; --text: #ebe9e4;
+    --muted: #aaa59c; --faint: #7c776f; --accent: #5dcaa5; --accent-bg: #11352b;
+    --warn: #f3c77a; --warn-bg: #3a2a0c; --code: #292826; --mark: #6b5314;
+    --empty: #282725; --l1: #1a4a3b; --l2: #1f7a5c; --l3: #35b389; --l4: #86e2c0;
+"""
+
 _CSS = r"""
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --bg: #fbfaf8; --panel: #ffffff; --line: #e5e1da; --text: #1f1e1c;
   --muted: #66625b; --faint: #99948b; --accent: #0f6e56; --accent-bg: #e3f4ed;
   --warn: #854f0b; --warn-bg: #faeeda; --code: #f3f1ec; --mark: #fad68a;
@@ -499,13 +519,9 @@ _CSS = r"""
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #161615; --panel: #1e1e1c; --line: #34322e; --text: #ebe9e4;
-    --muted: #aaa59c; --faint: #7c776f; --accent: #5dcaa5; --accent-bg: #11352b;
-    --warn: #f3c77a; --warn-bg: #3a2a0c; --code: #292826; --mark: #6b5314;
-    --empty: #282725; --l1: #1a4a3b; --l2: #1f7a5c; --l3: #35b389; --l4: #86e2c0;
-  }
+  :root:not([data-theme="light"]) {""" + _DARK + r"""  }
 }
+:root[data-theme="dark"] {""" + _DARK + r"""}
 * { box-sizing: border-box; }
 html { background: var(--bg); }
 body { margin: 0; color: var(--text); font: 15px/1.7 var(--sans); }
@@ -519,9 +535,17 @@ a { color: var(--accent); }
   font-size: 14px; color: var(--text); background: var(--bg);
   border: 1px solid var(--line); border-radius: 8px; }
 #q:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-.hint { font: 12px var(--mono); color: var(--faint); border: 1px solid var(--line);
-  border-radius: 4px; padding: 0 6px; }
-html:not(.js) #q, html:not(.js) .hint { display: none; }
+
+.theme { display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0; color: var(--muted); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; cursor: pointer; }
+.theme:hover { color: var(--text); border-color: var(--faint); }
+.theme:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.theme svg { width: 16px; height: 16px; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.theme .sun, .theme.is-dark .moon { display: none; }
+.theme.is-dark .sun { display: block; }
+html:not(.js) #q, html:not(.js) .theme { display: none; }
 .layout { display: grid; grid-template-columns: 200px minmax(0, 1fr);
   max-width: 1240px; margin: 0 auto; }
 .side { position: sticky; top: 53px; align-self: start; max-height: calc(100vh - 53px);
@@ -617,6 +641,14 @@ li.kv > strong:first-child { display: block; font-size: 12px; font-weight: 600;
 .md pre, pre.raw { overflow: auto; background: var(--code); padding: 10px 12px;
   border-radius: 8px; font: 13px/1.5 var(--mono); }
 .md pre code { border: 0; padding: 0; background: none; font-size: inherit; }
+.hash { display: inline-block; margin: 0 0.1em; padding: 0 0.5em;
+  font: 0.8em/1.6 var(--mono); color: var(--accent); background: var(--accent-bg);
+  border: 1px solid transparent; border-radius: 999px; white-space: nowrap; }
+button.hash { cursor: copy; }
+button.hash:hover { border-color: var(--accent); }
+button.hash:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button.hash.copied { color: var(--panel); background: var(--accent); }
+button.hash.copied::after { content: " \2713"; }
 .manual { border: 1px dashed var(--faint); border-radius: 10px; padding: 4px 16px 8px; }
 .manual h2 { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
 .day-foot { margin: 24px 0 0; font-size: 12px; color: var(--faint); }
@@ -658,163 +690,245 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; }
 _JS = r"""
 (function () {
   "use strict";
-  document.documentElement.className += " js";
-  var q = document.getElementById("q");
-  var results = document.getElementById("results");
-  var units = null;
-  var timer = null;
-
-  function collect() {
-    units = [];
-    var found = document.querySelectorAll("article.day [data-unit]");
-    for (var i = 0; i < found.length; i++) {
-      var el = found[i];
-      var day = el.closest("article.day");
-      var item = el.closest("details.item");
-      var block = el.closest("section");
-      var title = item ? item.querySelector("summary .t") : block && block.querySelector("h2");
-      var unit = {
-        date: day.getAttribute("data-date"),
-        target: item ? item.id : (block && block.id) || day.id,
-        title: title ? title.textContent.trim() : "",
-        text: el.textContent.replace(/\s+/g, " ").trim()
-      };
-      // Lowercased once, here: a year of worklog is megabytes of text, and a
-      // case-insensitive regex over all of it on every keystroke is felt.
-      unit.hay = (unit.title + " " + unit.text).toLowerCase();
-      units.push(unit);
-    }
+  var root = document.documentElement;
+  var THEME_KEY = "git-worklog-theme";
+  root.className += " js";
+  // This runs in <head>, before the body is painted, so a remembered theme
+  // never flashes the other one first.
+  try {
+    var saved = localStorage.getItem(THEME_KEY);
+    if (saved === "light" || saved === "dark") { root.setAttribute("data-theme", saved); }
+  } catch (e) {
+    // Storage refused (a file:// policy, a private window): follow the system.
   }
 
-  function escapeRe(s) {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  }
+  document.addEventListener("DOMContentLoaded", function () {
+    var q = document.getElementById("q");
+    var results = document.getElementById("results");
+    var units = null;
+    var timer = null;
 
-  function snippet(text, any) {
-    any.lastIndex = 0;
-    var first = any.exec(text);
-    var at = first ? first.index : 0;
-    var start = Math.max(0, at - 60);
-    var end = Math.min(text.length, at + 160);
-    var piece = (start > 0 ? "…" : "") + text.slice(start, end) + (end < text.length ? "…" : "");
-    var span = document.createElement("span");
-    span.className = "snip";
-    var last = 0;
-    var m;
-    any.lastIndex = 0;
-    while ((m = any.exec(piece)) !== null) {
-      span.appendChild(document.createTextNode(piece.slice(last, m.index)));
-      var mark = document.createElement("mark");
-      mark.textContent = m[0];
-      span.appendChild(mark);
-      last = m.index + m[0].length;
-    }
-    span.appendChild(document.createTextNode(piece.slice(last)));
-    return span;
-  }
-
-  function line(tag, cls, text) {
-    var el = document.createElement(tag);
-    if (cls) { el.className = cls; }
-    el.textContent = text;
-    return el;
-  }
-
-  function search(query) {
-    var terms = query.split(/\s+/).filter(function (t) { return t; });
-    while (results.firstChild) { results.removeChild(results.firstChild); }
-    if (!terms.length) {
-      document.body.classList.remove("searching");
-      results.hidden = true;
-      return;
-    }
-    if (!units) { collect(); }
-    var needles = terms.map(function (t) { return t.toLowerCase(); });
-    var any = new RegExp(terms.map(escapeRe).join("|"), "gi");
-    var hits = units.filter(function (u) {
-      return needles.every(function (t) { return u.hay.indexOf(t) !== -1; });
-    });
-    document.body.classList.add("searching");
-    results.hidden = false;
-    results.appendChild(line("h1", "", hits.length + (hits.length === 1 ? " match" : " matches")
-      + " for “" + query + "”"));
-    var date = null;
-    hits.slice(0, 200).forEach(function (u) {
-      if (u.date !== date) {
-        date = u.date;
-        results.appendChild(line("h2", "", date));
-      }
-      var a = document.createElement("a");
-      a.className = "hit";
-      a.href = "#" + u.target;
-      a.appendChild(line("span", "hit-title", u.title || date));
-      a.appendChild(snippet(u.text, any));
-      results.appendChild(a);
-    });
-    if (!hits.length) {
-      results.appendChild(line("p", "muted", "No matches. Every word has to appear, in any order."));
-    } else if (hits.length > 200) {
-      results.appendChild(line("p", "muted", "Showing the first 200. Add a word to narrow it down."));
-    }
-  }
-
-  function currentDay() {
-    var el = location.hash.length > 1 && document.getElementById(location.hash.slice(1));
-    return el ? el.closest("article.day") : null;
-  }
-
-  function markNav() {
-    var day = currentDay();
-    var want = "#" + (day ? day.id : "overview");
-    var links = document.querySelectorAll(".side a");
-    for (var i = 0; i < links.length; i++) {
-      if (links[i].getAttribute("href") === want) {
-        links[i].setAttribute("aria-current", "page");
-      } else {
-        links[i].removeAttribute("aria-current");
+    function collect() {
+      units = [];
+      var found = document.querySelectorAll("article.day [data-unit]");
+      for (var i = 0; i < found.length; i++) {
+        var el = found[i];
+        var day = el.closest("article.day");
+        var item = el.closest("details.item");
+        var block = el.closest("section");
+        var title = item ? item.querySelector("summary .t") : block && block.querySelector("h2");
+        var unit = {
+          date: day.getAttribute("data-date"),
+          target: item ? item.id : (block && block.id) || day.id,
+          title: title ? title.textContent.trim() : "",
+          text: el.textContent.replace(/\s+/g, " ").trim()
+        };
+        // Lowercased once, here: a year of worklog is megabytes of text, and a
+        // case-insensitive regex over all of it on every keystroke is felt.
+        unit.hay = (unit.title + " " + unit.text).toLowerCase();
+        units.push(unit);
       }
     }
-  }
 
-  function clearSearch() {
-    if (q.value) { q.value = ""; search(""); }
-  }
+    function escapeRe(s) {
+      return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
 
-  q.addEventListener("input", function () {
-    clearTimeout(timer);
-    timer = setTimeout(function () { search(q.value.trim()); }, 120);
-  });
-  q.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") { clearSearch(); q.blur(); }
-  });
-  function reveal(scroll) {
-    var el = location.hash.length > 1 && document.getElementById(location.hash.slice(1));
-    if (el && el.tagName === "DETAILS") { el.open = true; }
-    // Coming from search, the browser scrolled while the target was still
-    // hidden under the results, so it did not move at all. Scroll again now.
-    if (el && scroll) { el.scrollIntoView(); }
-  }
+    function snippet(text, any) {
+      any.lastIndex = 0;
+      var first = any.exec(text);
+      var at = first ? first.index : 0;
+      var start = Math.max(0, at - 60);
+      var end = Math.min(text.length, at + 160);
+      var piece = (start > 0 ? "…" : "") + text.slice(start, end) + (end < text.length ? "…" : "");
+      var span = document.createElement("span");
+      span.className = "snip";
+      var last = 0;
+      var m;
+      any.lastIndex = 0;
+      while ((m = any.exec(piece)) !== null) {
+        span.appendChild(document.createTextNode(piece.slice(last, m.index)));
+        var mark = document.createElement("mark");
+        mark.textContent = m[0];
+        span.appendChild(mark);
+        last = m.index + m[0].length;
+      }
+      span.appendChild(document.createTextNode(piece.slice(last)));
+      return span;
+    }
 
-  results.addEventListener("click", function (e) {
-    var a = e.target.closest("a.hit");
-    if (a && a.hash === location.hash) { clearSearch(); reveal(true); }
-  });
-  document.addEventListener("keydown", function (e) {
-    var tag = e.target && e.target.tagName;
-    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") { return; }
-    if (e.metaKey || e.ctrlKey || e.altKey) { return; }
-    if (e.key === "/") { e.preventDefault(); q.focus(); return; }
-    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") { return; }
-    var day = currentDay();
-    var to = day && day.getAttribute(e.key === "ArrowLeft" ? "data-prev" : "data-next");
-    if (to) { e.preventDefault(); location.hash = to; }
-  });
-  window.addEventListener("hashchange", function () {
-    var searching = !!q.value;
-    clearSearch();
-    reveal(searching);
+    function line(tag, cls, text) {
+      var el = document.createElement(tag);
+      if (cls) { el.className = cls; }
+      el.textContent = text;
+      return el;
+    }
+
+    function search(query) {
+      var terms = query.split(/\s+/).filter(function (t) { return t; });
+      while (results.firstChild) { results.removeChild(results.firstChild); }
+      if (!terms.length) {
+        document.body.classList.remove("searching");
+        results.hidden = true;
+        return;
+      }
+      if (!units) { collect(); }
+      var needles = terms.map(function (t) { return t.toLowerCase(); });
+      var any = new RegExp(terms.map(escapeRe).join("|"), "gi");
+      var hits = units.filter(function (u) {
+        return needles.every(function (t) { return u.hay.indexOf(t) !== -1; });
+      });
+      document.body.classList.add("searching");
+      results.hidden = false;
+      results.appendChild(line("h1", "", hits.length + (hits.length === 1 ? " match" : " matches")
+        + " for “" + query + "”"));
+      var date = null;
+      hits.slice(0, 200).forEach(function (u) {
+        if (u.date !== date) {
+          date = u.date;
+          results.appendChild(line("h2", "", date));
+        }
+        var a = document.createElement("a");
+        a.className = "hit";
+        a.href = "#" + u.target;
+        a.appendChild(line("span", "hit-title", u.title || date));
+        a.appendChild(snippet(u.text, any));
+        results.appendChild(a);
+      });
+      if (!hits.length) {
+        results.appendChild(line("p", "muted", "No matches. Every word has to appear, in any order."));
+      } else if (hits.length > 200) {
+        results.appendChild(line("p", "muted", "Showing the first 200. Add a word to narrow it down."));
+      }
+    }
+
+    function currentDay() {
+      var el = location.hash.length > 1 && document.getElementById(location.hash.slice(1));
+      return el ? el.closest("article.day") : null;
+    }
+
+    function markNav() {
+      var day = currentDay();
+      var want = "#" + (day ? day.id : "overview");
+      var links = document.querySelectorAll(".side a");
+      for (var i = 0; i < links.length; i++) {
+        if (links[i].getAttribute("href") === want) {
+          links[i].setAttribute("aria-current", "page");
+        } else {
+          links[i].removeAttribute("aria-current");
+        }
+      }
+    }
+
+    function clearSearch() {
+      if (q.value) { q.value = ""; search(""); }
+    }
+
+    q.addEventListener("input", function () {
+      clearTimeout(timer);
+      timer = setTimeout(function () { search(q.value.trim()); }, 120);
+    });
+    q.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") { clearSearch(); q.blur(); }
+    });
+    function reveal(scroll) {
+      var el = location.hash.length > 1 && document.getElementById(location.hash.slice(1));
+      if (el && el.tagName === "DETAILS") { el.open = true; }
+      // Coming from search, the browser scrolled while the target was still
+      // hidden under the results, so it did not move at all. Scroll again now.
+      if (el && scroll) { el.scrollIntoView(); }
+    }
+
+    results.addEventListener("click", function (e) {
+      var a = e.target.closest("a.hit");
+      if (a && a.hash === location.hash) { clearSearch(); reveal(true); }
+    });
+    document.addEventListener("keydown", function (e) {
+      var tag = e.target && e.target.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") { return; }
+      if (e.metaKey || e.ctrlKey || e.altKey) { return; }
+      if (e.key === "/") { e.preventDefault(); q.focus(); return; }
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") { return; }
+      var day = currentDay();
+      var to = day && day.getAttribute(e.key === "ArrowLeft" ? "data-prev" : "data-next");
+      if (to) { e.preventDefault(); location.hash = to; }
+    });
+    window.addEventListener("hashchange", function () {
+      var searching = !!q.value;
+      clearSearch();
+      reveal(searching);
+      markNav();
+    });
+    // A commit hash is a button the renderer made; clicking it copies the hash.
+    function copyText(text) {
+      if (navigator.clipboard && window.isSecureContext) {
+        return navigator.clipboard.writeText(text);
+      }
+      return new Promise(function (resolve, reject) {
+        var area = document.createElement("textarea");
+        area.value = text;
+        area.setAttribute("readonly", "");
+        area.style.position = "fixed";
+        area.style.opacity = "0";
+        document.body.appendChild(area);
+        area.select();
+        var done = false;
+        try { done = document.execCommand("copy"); } catch (e) { done = false; }
+        document.body.removeChild(area);
+        if (done) { resolve(); } else { reject(); }
+      });
+    }
+
+    document.addEventListener("click", function (e) {
+      var badge = e.target.closest ? e.target.closest("button.hash") : null;
+      if (!badge) { return; }
+      e.preventDefault();   // in a work item's title, copy without folding the card
+      var hash = badge.getAttribute("data-hash");
+      copyText(hash).then(function () {
+        badge.classList.add("copied");
+        badge.title = "Copied " + hash;
+        clearTimeout(badge.copiedTimer);
+        badge.copiedTimer = setTimeout(function () {
+          badge.classList.remove("copied");
+          badge.title = "Copy " + hash;
+        }, 1200);
+      }, function () {
+        // No clipboard here: leave the hash selected so Ctrl/Cmd+C finishes it.
+        var range = document.createRange();
+        range.selectNodeContents(badge);
+        var selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        badge.title = "Press Ctrl+C or Cmd+C to copy " + hash;
+      });
+    });
+
+    var toggle = document.getElementById("theme");
+    var system = window.matchMedia("(prefers-color-scheme: dark)");
+
+    function isDark() {
+      var chosen = root.getAttribute("data-theme");
+      return chosen ? chosen === "dark" : system.matches;
+    }
+
+    function paintToggle() {
+      var dark = isDark();
+      var label = dark ? "Switch to light theme" : "Switch to dark theme";
+      toggle.classList.toggle("is-dark", dark);
+      toggle.setAttribute("aria-label", label);
+      toggle.title = label;
+    }
+
+    toggle.addEventListener("click", function () {
+      var next = isDark() ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* not remembered */ }
+      paintToggle();
+    });
+    // Until the reader picks, the page follows the system; keep the icon honest.
+    if (system.addEventListener) { system.addEventListener("change", paintToggle); }
+    paintToggle();
     markNav();
   });
-  markNav();
 })();
 """
