@@ -6,7 +6,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Added
+## [1.3.1] - 2026-09-24
+
+### Changed
 
 - **`view` has a light/dark switch in the top right.** The page still follows
   the system's setting until the reader picks one, and the pick is remembered
@@ -24,9 +26,6 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   inside something that is itself a link, such as a timeline card, the badge is
   inert. Where the browser offers no clipboard, the click selects the hash so
   Ctrl/Cmd+C finishes the copy.
-
-### Changed
-
 - **The `/` shortcut hint moved into the search box's placeholder** ("Search
   the worklog (press /)"). Drawn as a separate key beside the box, it read as a
   control of its own.
@@ -1055,7 +1054,8 @@ satisfied.
 - A stdlib-only `unittest` suite and GitHub Actions CI on Python 3.9 / 3.12 / 3.13,
   with a `skill.zip` release artifact.
 
-[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/g761007/git-worklog/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/g761007/git-worklog/compare/v1.2.2...v1.3.0
 [1.2.2]: https://github.com/g761007/git-worklog/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/g761007/git-worklog/compare/v1.2.0...v1.2.1

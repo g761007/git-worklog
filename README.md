@@ -133,7 +133,7 @@ the skill, or `skill.zip`, has nothing to install. With
 own and puts it on your PATH:
 
 ```bash
-uv tool install "git+https://github.com/g761007/git-worklog@v1.3.0"
+uv tool install "git+https://github.com/g761007/git-worklog@v1.3.1"
 ```
 
 Put the release you want in the tag (see
@@ -589,7 +589,7 @@ repo 安裝：skill 的複本或 `skill.zip` 裡沒有可以安裝的東西。�
 [uv](https://docs.astral.sh/uv/)，它會替這個指令建立獨立的環境，並放進你的 PATH：
 
 ```bash
-uv tool install "git+https://github.com/g761007/git-worklog@v1.3.0"
+uv tool install "git+https://github.com/g761007/git-worklog@v1.3.1"
 ```
 
 tag 填你要的版本（見 [Releases](https://github.com/g761007/git-worklog/releases)）；
