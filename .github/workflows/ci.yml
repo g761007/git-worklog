@@ -53,6 +53,8 @@ jobs:
           python -m git_worklog version
           python -m git_worklog --text doctor || true   # warnings are not failures here
           python -m git_worklog validate --dir .git-worklog
+          python -m git_worklog view --no-open --dir .git-worklog --output "$RUNNER_TEMP/view.html"
+          grep -q 'Content-Security-Policy' "$RUNNER_TEMP/view.html"
 
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
@@ -123,6 +125,10 @@ jobs:
           # No PYTHONPATH, no pip install: exactly what a user gets.
           python -m git_worklog version
           python -m git_worklog --help > /dev/null
+          # The page's CSS and script live in the module, so a zip that runs
+          # this has everything `view` needs.
+          python -m git_worklog view --no-open --dir "$GITHUB_WORKSPACE/.git-worklog" --output "$dest/view.html"
+          grep -q 'Content-Security-Policy' "$dest/view.html"
           python -c "
           import sys; sys.path.insert(0, '.')
           from git_worklog import providers
