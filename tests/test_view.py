@@ -73,7 +73,7 @@ HOSTILE = [
 
 # Every tag the renderer may emit. Anything else in its output came from input.
 RENDERER_TAGS = {"p", "br", "ul", "ol", "li", "code", "strong", "em", "a", "pre",
-                 "h4", "h5", "h6", "hr"}
+                 "h4", "h5", "h6", "hr", "button", "span"}
 
 
 class Raw:
@@ -206,6 +206,45 @@ class TestMarkdownStructure(unittest.TestCase):
         self.assertEqual(mdhtml.render("# Big"), "<h4>Big</h4>")
 
 
+def badged(html: str) -> "list[str]":
+    return re.findall(r'<button type="button" class="hash" data-hash="([0-9a-f]+)"', html)
+
+
+class TestCommitBadges(unittest.TestCase):
+    """Commit hashes become copy buttons; look-alikes stay text."""
+
+    def test_the_formats_own_commit_references_become_badges(self):
+        out = mdhtml.inline("d6f6687 (Alice) fix: a；f00b9f3 (Alice) Merge pull request #30")
+        self.assertEqual(badged(out), ["d6f6687", "f00b9f3"])
+        self.assertIn('title="Copy d6f6687"', out)
+
+    def test_an_all_digit_hash_counts_when_written_as_a_reference(self):
+        # Four of this repository's 91 cited commits are all digits.
+        self.assertEqual(badged(mdhtml.inline("7545112 (Alice) feat: add it")), ["7545112"])
+        self.assertEqual(badged(mdhtml.inline("7545112（Alice）feat: add it")), ["7545112"])
+
+    def test_numbers_and_all_hex_words_stay_text(self):
+        self.assertEqual(badged(mdhtml.inline("1047686 bytes; defaced and acceded")), [])
+
+    def test_hashes_in_prose_with_or_without_spaces(self):
+        self.assertEqual(badged(mdhtml.inline("修正於1234abc。以及（fc845f7）")),
+                         ["1234abc", "fc845f7"])
+        full = "754511264668bf03e8d62f58a51795c9cb6f153b"
+        self.assertEqual(badged(mdhtml.inline(f"{full} 新增 README.md")), [full])
+
+    def test_never_inside_code_links_paths_or_other_hex(self):
+        out = mdhtml.inline("`abc1234` [abc1234](https://x.example/commit/abc1234) "
+                            "commit/abc1234 #11352b80 "
+                            "sha256:6087a2075f53e4dd14d525109e52c421eade40c39ce4b9e8baeb5ee4e7016d29 "
+                            "f076bd5c-b83c-4d62-9f3a-12ab34cd56ef")
+        self.assertEqual(badged(out), [])
+
+    def test_inside_a_link_a_hash_is_a_badge_that_does_nothing(self):
+        out = mdhtml.inline("reverted d6f6687", links=False)
+        self.assertEqual(badged(out), [])
+        self.assertIn('<span class="hash">d6f6687</span>', out)
+
+
 class TestDayStructure(unittest.TestCase):
     """Days are cut by structure, never by the words of their headings."""
 
@@ -280,6 +319,33 @@ class TestPage(InertMixin, unittest.TestCase):
         # Before anything it governs, and after the charset a file:// page needs.
         self.assertLess(page.index('<meta charset="utf-8">'), policy.start())
         self.assertLess(policy.start(), page.index("<style>"))
+
+    def test_a_chosen_theme_beats_the_system_either_way(self):
+        page, _ = self.build({"2026-07-15": MARKED})
+        css = page.split("<style>", 1)[1].split("</style>", 1)[0]
+        # A dark system applies only while the reader has not picked light...
+        self.assertRegex(css, r'@media \(prefers-color-scheme: dark\) \{\s*'
+                              r':root:not\(\[data-theme="light"\]\) \{')
+        by_system = css.split(':root:not([data-theme="light"]) {', 1)[1].split("}", 1)[0]
+        # ...and picking dark applies it whatever the system says, same palette.
+        by_choice = css.split(':root[data-theme="dark"] {', 1)[1].split("}", 1)[0]
+        self.assertEqual(by_system.strip(), by_choice.strip())
+        self.assertIn("color-scheme: dark", by_choice)
+        self.assertIn('<button id="theme"', page)
+        # The script that applies a remembered choice runs before the body paints,
+        # so the other theme never flashes first.
+        self.assertLess(page.index("<script>"), page.index("<body>"))
+
+    def test_hash_badges_never_end_up_inside_a_link(self):
+        day = ("## 當日摘要\n\nReverted d6f6687 today.\n\n## 主要異動\n\n"
+               "### Revert d6f6687\n\n- **相關 commits：** d6f6687 (Alice) revert\n")
+        page, _ = self.build({"2026-07-15": day})
+        # The card's lead and the table of contents are links: a span there.
+        self.assertIsNone(re.search(r"<a [^>]*>(?:(?!</a>).)*<button", page, re.S))
+        self.assertIn('<span class="hash">d6f6687</span>', page)
+        # In the day itself -- the item's title and its field -- a copy button.
+        article = page.split('<article id="d-2026-07-15"', 1)[1]
+        self.assertGreaterEqual(len(badged(article)), 3)
 
     def test_every_day_gets_an_article_and_the_tiles_add_up(self):
         second = "## 當日摘要\n\nSecond day.\n\n## 主要異動\n\n### Only item\n\n- **x：** 1234abc\n"
