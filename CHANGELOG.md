@@ -6,6 +6,31 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`view` has a light/dark switch in the top right.** The page still follows
+  the system's setting until the reader picks one, and the pick is remembered
+  by the browser. A page that refuses storage — some browsers do for `file://`
+  — simply keeps following the system. The script that applies a remembered
+  pick now runs in `<head>`, so the other theme never flashes first, and one
+  dark palette serves both "the system prefers dark" and "the reader picked
+  dark", so the two cannot drift apart.
+- **Commit hashes in `view` are badges you can click to copy.** A token counts
+  when it mixes digits and letters, or when it is written as the format's own
+  commit reference, `<hash> (<author>)` — which catches the hashes that happen
+  to be all digits (four of the 91 in this repository's worklog) while numbers
+  and all-hex words such as "defaced" stay plain text. Hashes inside code
+  spans, links, paths, colours and longer hex strings are left alone, and
+  inside something that is itself a link, such as a timeline card, the badge is
+  inert. Where the browser offers no clipboard, the click selects the hash so
+  Ctrl/Cmd+C finishes the copy.
+
+### Changed
+
+- **The `/` shortcut hint moved into the search box's placeholder** ("Search
+  the worklog (press /)"). Drawn as a separate key beside the box, it read as a
+  control of its own.
+
 ## [1.3.0] - 2026-09-24
 
 ### Added

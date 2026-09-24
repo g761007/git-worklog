@@ -224,7 +224,9 @@ them cannot interleave.
 `.git-worklog/` into one self-contained HTML page and opens it in your browser:
 an overview with counts, an activity calendar and a timeline; every day with its
 summary, a table of contents and collapsible work-item cards; and search across
-all of it.
+all of it. It follows your system's light or dark setting until you pick one
+with the switch in the top right, which the browser then remembers. Commit
+hashes show as badges: click one to copy it.
 
 ![The overview: counts, an activity calendar shaded by work items per day, and a timeline of every day's summary](docs/images/view-overview.png)
 
@@ -666,7 +668,8 @@ git-worklog apply --preview-id <preview_id>
 
 `view` 是唯一一個「給人讀」而不是給流程用的指令。它把 `.git-worklog/` 渲染成一個自含
 的 HTML 頁面並用瀏覽器開啟：總覽（統計、活動日曆、時間軸）、每一天的摘要、目錄與可收合
-的工作項目卡片，以及跨所有日誌的搜尋。
+的工作項目卡片，以及跨所有日誌的搜尋。頁面預設跟隨系統的淺色／深色設定；用右上角的按鈕
+切換之後，瀏覽器會記住你的選擇。commit hash 會顯示成 badge，點一下就能複製。
 
 ![總覽：統計、依每日工作項目數著色的活動日曆，以及每一天摘要的時間軸](docs/images/view-overview.png)
 
