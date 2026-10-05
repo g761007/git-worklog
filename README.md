@@ -133,7 +133,7 @@ the skill, or `skill.zip`, has nothing to install. With
 own and puts it on your PATH:
 
 ```bash
-uv tool install "git+https://github.com/g761007/git-worklog@v1.3.1"
+uv tool install "git+https://github.com/g761007/git-worklog@v1.4.0"
 ```
 
 Put the release you want in the tag (see
@@ -360,7 +360,7 @@ the old file, and refuses if the legacy markers are corrupt.
   are never translated in any language. `index.md` fixes its language on first
   build so it does not churn between contributors. See roadmap §6.2.
 - **Subagent models:** defined once in `git-worklog/git_worklog/data/provider_models.json`
-  (cost-first defaults — Claude Haiku 4.5 / GPT-5.6 Luna / Gemini 3.5 Flash) and
+  (cost-first defaults — Claude Haiku 4.5 / GPT-6 Luna / Gemini 3.8 Flash) and
   resolved per host by `resolve_provider_model.py`. Override with
   `GIT_WORKLOG_{ANTHROPIC,OPENAI,GOOGLE}_MODEL` or an explicit `--model`. See
   `references/provider-models.md`.
@@ -589,7 +589,7 @@ repo 安裝：skill 的複本或 `skill.zip` 裡沒有可以安裝的東西。�
 [uv](https://docs.astral.sh/uv/)，它會替這個指令建立獨立的環境，並放進你的 PATH：
 
 ```bash
-uv tool install "git+https://github.com/g761007/git-worklog@v1.3.1"
+uv tool install "git+https://github.com/g761007/git-worklog@v1.4.0"
 ```
 
 tag 填你要的版本（見 [Releases](https://github.com/g761007/git-worklog/releases)）；
@@ -786,7 +786,7 @@ skill 會明講並詢問是否先補齊——**絕不默默降級成摘要 commi
   與 API 名稱都不翻譯。`index.md` 於首次建立時固定語言，避免不同貢獻者反覆改寫。
   詳見 roadmap §6.2。
 - **Subagent 模型**：於 `git-worklog/git_worklog/data/provider_models.json` 統一設定
-  （成本優先預設——Claude Haiku 4.5 ／ GPT-5.6 Luna ／ Gemini 3.5 Flash），由
+  （成本優先預設——Claude Haiku 4.5 ／ GPT-6 Luna ／ Gemini 3.8 Flash），由
   `resolve_provider_model.py` 依宿主解析；可用
   `GIT_WORKLOG_{ANTHROPIC,OPENAI,GOOGLE}_MODEL` 或 `--model` 覆寫，詳見
   `references/provider-models.md`。

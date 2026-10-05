@@ -21,12 +21,12 @@ CONFIG_PATH = os.path.join(SKILL_DIR, "git_worklog", "data", "provider_models.js
 
 NEW_DEFAULTS = {
     "anthropic": "claude-haiku-4-5",
-    "openai": "gpt-5.6-luna",
-    "google": "gemini-3.5-flash",
+    "openai": "gpt-6-luna",
+    "google": "gemini-3.8-flash",
 }
 EXPECTED_ESCALATION = {
-    "anthropic": "claude-sonnet-5",
-    "openai": "gpt-5.6-terra",
+    "anthropic": "claude-sonnet-5-5",
+    "openai": "gpt-6.1-sol",
     "google": "gemini-3.1-pro-preview",
 }
 
@@ -60,14 +60,14 @@ class TestProviderMapping(unittest.TestCase):
         out, rc, err = run_script("resolve_provider_model.py", ["--host", "openai"])
         self.assertEqual(rc, 0, err)
         self.assertEqual(out["provider"], "openai")
-        self.assertEqual(out["model"]["model_id"], "gpt-5.6-luna")
+        self.assertEqual(out["model"]["model_id"], "gpt-6-luna")
         self.assertEqual(out["model"]["reasoning_effort"], "low")
 
     def test_google_selects_flash_without_effort(self):
         out, rc, err = run_script("resolve_provider_model.py", ["--host", "google"])
         self.assertEqual(rc, 0, err)
         self.assertEqual(out["provider"], "google")
-        self.assertEqual(out["model"]["model_id"], "gemini-3.5-flash")
+        self.assertEqual(out["model"]["model_id"], "gemini-3.8-flash")
         self.assertNotIn("reasoning_effort", out["model"])
 
     def test_unknown_host_errors(self):
@@ -87,8 +87,8 @@ class TestProviderMapping(unittest.TestCase):
     def test_does_not_borrow_another_providers_model(self):
         out, _, _ = run_script("resolve_provider_model.py", ["--host", "anthropic"])
         blob = json.dumps(out)
-        self.assertNotIn("gpt-5.6-luna", blob)
-        self.assertNotIn("gemini-3.5-flash", blob)
+        self.assertNotIn("gpt-6-luna", blob)
+        self.assertNotIn("gemini-3.8-flash", blob)
 
 
 class TestOverrides(unittest.TestCase):
@@ -96,7 +96,7 @@ class TestOverrides(unittest.TestCase):
 
     def test_no_override_uses_config_default(self):
         out, _, _ = run_script("resolve_provider_model.py", ["--host", "openai"])
-        self.assertEqual(out["model"]["model_id"], "gpt-5.6-luna")
+        self.assertEqual(out["model"]["model_id"], "gpt-6-luna")
         self.assertEqual(out["model_id_source"], "config")
 
     def test_env_override(self):
@@ -231,7 +231,7 @@ class TestFallback(unittest.TestCase):
         # as the active model, even though it is available.
         out, _, _ = run_script("resolve_provider_model.py", ["--host", "openai"])
         self.assertEqual(out["escalated"], False)
-        self.assertEqual(out["model"]["model_id"], "gpt-5.6-luna")
+        self.assertEqual(out["model"]["model_id"], "gpt-6-luna")
         self.assertNotEqual(out["model"]["model_id"], out["escalation"]["model_id"])
 
 
@@ -254,7 +254,7 @@ class TestEscalation(unittest.TestCase):
                                   ["--host", "openai", "--escalate"])
         self.assertEqual(rc, 0, err)
         self.assertTrue(out["escalated"])
-        self.assertEqual(out["model"]["model_id"], "gpt-5.6-terra")
+        self.assertEqual(out["model"]["model_id"], "gpt-6.1-sol")
         self.assertEqual(out["model"]["reasoning_effort"], "medium")
 
     def test_escalation_unavailable_errors(self):
@@ -299,12 +299,16 @@ class TestNoRetiredDefaults(unittest.TestCase):
 
     Scoped to the shipped skill (git-worklog/). The historical design docs under
     docs/plans/ are intentionally excluded — they record pre-change plans.
-    The old names claude-sonnet-5 / gpt-5.6-terra are permitted ONLY as escalation
-    config; gemini-3-flash-preview (the retired google default) must be gone.
+    The escalation ids are permitted ONLY in an escalation context. Retired ids
+    must be gone: gemini-3-flash-preview (the 0.3.0 google default) and
+    gpt-5.6-luna / gpt-5.6-terra / gemini-3.5-flash (replaced by GPT-6 and
+    Gemini 3.8). claude-sonnet-5 cannot be listed — it is a prefix of its
+    replacement, claude-sonnet-5-5.
     """
 
-    RETIRED_EVERYWHERE = ["gemini-3-flash-preview"]
-    ESCALATION_ONLY = ["claude-sonnet-5", "gpt-5.6-terra", "gemini-3.1-pro-preview"]
+    RETIRED_EVERYWHERE = ["gemini-3-flash-preview", "gpt-5.6-luna", "gpt-5.6-terra",
+                          "gemini-3.5-flash"]
+    ESCALATION_ONLY = ["claude-sonnet-5-5", "gpt-6.1-sol", "gemini-3.1-pro-preview"]
 
     def _shipped_files(self):
         for dirpath, _dirs, names in os.walk(SKILL_DIR):

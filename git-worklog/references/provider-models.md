@@ -16,8 +16,8 @@ replace them with pricier models.
 | Host        | provider key | display_name       | default model_id       | reasoning_effort |
 | ----------- | ------------ | ------------------ | ---------------------- | ---------------- |
 | Claude Code | `anthropic`  | Claude Haiku 4.5   | `claude-haiku-4-5`     | —                |
-| Codex       | `openai`     | GPT-5.6 Luna       | `gpt-5.6-luna`         | `low`            |
-| Gemini      | `google`     | Gemini 3.5 Flash   | `gemini-3.5-flash`     | —                |
+| Codex       | `openai`     | GPT-6 Luna         | `gpt-6-luna`           | `low`            |
+| Gemini      | `google`     | Gemini 3.8 Flash   | `gemini-3.8-flash`     | —                |
 
 `reasoning_effort` applies to `openai` only. For `anthropic` and `google` the
 field is **omitted entirely** (never an empty string) from the resolver output
@@ -102,7 +102,7 @@ rather than proceed. It MUST NOT:
 
 - silently switch to a more expensive model,
 - auto-pick another model,
-- fall back to the previous defaults (Sonnet / Terra / Pro),
+- fall back to the escalation models (Sonnet / Sol / Pro),
 - degrade to reading only commit messages,
 - ignore the error and keep generating a worklog.
 
@@ -115,13 +115,13 @@ Example message:
 ```text
 Unable to start Git Worklog subagent.
 Provider: openai
-Requested model: gpt-5.6-luna
+Requested model: gpt-6-luna
 The requested model is not available in the current host.
 No fallback model was selected automatically.
 
 Currently selectable models:
   - Claude Haiku 4.5 (anthropic / claude-haiku-4-5)
-  - Gemini 3.5 Flash (google / gemini-3.5-flash)
+  - Gemini 3.8 Flash (google / gemini-3.8-flash)
 
 Please configure an available model ID and run the dry-run again.
 ```
@@ -134,8 +134,8 @@ automatic**.
 
 | provider    | escalation_model_id       | escalation_reasoning_effort |
 | ----------- | ------------------------- | --------------------------- |
-| `anthropic` | `claude-sonnet-5`         | —                           |
-| `openai`    | `gpt-5.6-terra`           | `medium`                    |
+| `anthropic` | `claude-sonnet-5-5`       | —                           |
+| `openai`    | `gpt-6.1-sol`             | `medium`                    |
 | `google`    | `gemini-3.1-pro-preview`  | —                           |
 
 Rules (`escalation_policy.automatic` is fixed to `false`):
