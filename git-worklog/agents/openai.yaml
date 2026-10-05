@@ -43,7 +43,7 @@ ui:
 # Subagent model selection per host — SINGLE SOURCE OF TRUTH is the JSON below,
 # resolved by scripts/resolve_provider_model.py. Defaults prioritise cost
 # efficiency for bounded per-day analysis (anthropic: Claude Haiku 4.5, openai:
-# GPT-5.6 Luna @ low effort, google: Gemini 3.5 Flash). On an unavailable model
+# GPT-6 Luna @ low effort, google: Gemini 3.8 Flash). On an unavailable model
 # the skill halts and asks — it never silently swaps to a pricier model,
 # auto-picks another, or degrades to commit-message-only. See that file's
 # model_unavailable_policy and references/provider-models.md.

@@ -178,8 +178,8 @@ unavailable-model halt, escalation) are in `references/provider-models.md`.
 | Host | `provider` | default `model` (`model_id`) |
 |------|-----------|------------------------------|
 | Claude Code | `anthropic` | Claude Haiku 4.5 (`claude-haiku-4-5`) |
-| Codex | `openai` | GPT-5.6 Luna (`gpt-5.6-luna`, reasoning_effort `low`) |
-| Gemini | `google` | Gemini 3.5 Flash (`gemini-3.5-flash`) |
+| Codex | `openai` | GPT-6 Luna (`gpt-6-luna`, reasoning_effort `low`) |
+| Gemini | `google` | Gemini 3.8 Flash (`gemini-3.8-flash`) |
 
 `model` is an object — `{display_name, model_id}`, plus `reasoning_effort` for
 `openai` only (omitted for anthropic/google, never an empty string). A Day

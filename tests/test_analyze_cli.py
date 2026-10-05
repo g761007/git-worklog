@@ -345,7 +345,7 @@ class TestPrepareResolvesItsOwnModel(_Run):
                             "--timezone", _TZ, "--host", "anthropic",
                             "--escalate", env=self.env)
         self.assertTrue(d["ok"], err)
-        self.assertEqual(d["model"]["model_id"], "claude-sonnet-5")
+        self.assertEqual(d["model"]["model_id"], "claude-sonnet-5-5")
 
     def test_deprecated_env_var_warning_is_not_swallowed(self):
         """The legacy variable is honoured, and prepare says so.

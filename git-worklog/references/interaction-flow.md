@@ -215,8 +215,8 @@ When every day uses the same model, show it once:
 ```
 Subagent configuration:
 - Provider: OpenAI
-- Model: GPT-5.6 Luna
-- Model ID: gpt-5.6-luna
+- Model: GPT-6 Luna
+- Model ID: gpt-6-luna
 - Reasoning effort: low
 - Automatic escalation: disabled
 ```
@@ -226,9 +226,9 @@ google). If the user approved escalation for some dates, list per date instead:
 
 ```
 Subagent configuration:
-- 2026-07-13: GPT-5.6 Luna
-- 2026-07-14: GPT-5.6 Terra (user-approved escalation)
-- 2026-07-15: GPT-5.6 Luna
+- 2026-07-13: GPT-6 Luna
+- 2026-07-14: GPT-6.1 Sol (user-approved escalation)
+- 2026-07-15: GPT-6 Luna
 ```
 
 `git-worklog preview` supplies all of it in one object: `preview_id` (formatted
