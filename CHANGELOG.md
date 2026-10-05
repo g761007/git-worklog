@@ -6,6 +6,19 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Subagents run on the current OpenAI and Gemini models.** `openai` now
+  defaults to GPT-6 Luna (`gpt-6-luna`, reasoning effort still `low`) and
+  escalates to GPT-6.1 Sol (`gpt-6.1-sol`, still `medium`); `google` defaults to
+  Gemini 3.8 Flash (`gemini-3.8-flash`), since Google's model list now calls
+  `gemini-3.5-flash` its legacy Flash; `anthropic` escalates to Claude Sonnet 5.5
+  (`claude-sonnet-5-5`). The defaults stay cost-first — GPT-6 Luna is the model
+  OpenAI pitches for high-volume work, and Gemini 3.8 Flash is priced at or below
+  the Flash it replaces. Claude Haiku 4.5 and the Gemini escalation model,
+  `gemini-3.1-pro-preview` (still the only Gemini Pro), are unchanged, and a
+  `GIT_WORKLOG_<PROVIDER>_MODEL` or `--model` override still takes precedence.
+
 ## [1.3.1] - 2026-09-24
 
 ### Changed
