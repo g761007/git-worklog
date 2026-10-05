@@ -37,7 +37,12 @@ PATH.
 # 1.3.1 is a patch on the reading that `view`'s page is output, not interface: no
 # command, flag or JSON field changed. The light/dark switch and the copy badges
 # are the parts of 1.3.0's page that should have shipped with it.
-__version__ = "1.3.1"
+#
+# 1.4.0 is a minor bump on the 1.1.0 reading: no command, flag or JSON field
+# changed, but every host's default subagent model did (GPT-6 Luna, Gemini 3.8
+# Flash; Sonnet 5.5 and GPT-6.1 Sol to escalate). Which model reads your code,
+# and what a run costs, is not invisible.
+__version__ = "1.4.0"
 
 # On-disk layout version of `.git-worklog/`, re-exported for convenience. It
 # describes the *data*, not the tool, and bumps only when a migration is needed.

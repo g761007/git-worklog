@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-05
+
 ### Changed
 
 - **Subagents run on the current OpenAI and Gemini models.** `openai` now
@@ -1067,7 +1069,8 @@ satisfied.
 - A stdlib-only `unittest` suite and GitHub Actions CI on Python 3.9 / 3.12 / 3.13,
   with a `skill.zip` release artifact.
 
-[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/g761007/git-worklog/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/g761007/git-worklog/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/g761007/git-worklog/compare/v1.2.2...v1.3.0
 [1.2.2]: https://github.com/g761007/git-worklog/compare/v1.2.1...v1.2.2
