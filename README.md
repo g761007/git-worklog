@@ -95,8 +95,19 @@ The worklog itself is written to `.git-worklog/` at the repository root:
 
 ### Installation
 
-This directory *is* the skill. Install it by placing the `git-worklog/` folder
-where your host discovers skills, for example for Claude Code:
+The quickest way is to let your coding agent do it. Paste this one line into
+Claude Code, Codex, Gemini or any other agent that can run shell commands:
+
+```text
+Install the git-worklog agent skill for me: download https://github.com/g761007/git-worklog/releases/latest/download/skill.zip, unzip it, and move the git-worklog/ folder inside into your user-level skills directory (for Claude Code, ~/.claude/skills/); if a git-worklog skill is already there, ask me before replacing it.
+```
+
+That link always resolves to the newest release, so the same line also
+upgrades an existing install.
+
+To do it by hand: this directory *is* the skill. Install it by placing the
+`git-worklog/` folder where your host discovers skills, for example for Claude
+Code:
 
 ```bash
 # user-level
@@ -558,7 +569,17 @@ subagent 分析，所有變更都先以 dry-run 預覽，**經你明確確認後
 
 ### 安裝
 
-這個目錄本身就是 skill，把 `git-worklog/` 放到宿主會探索 skill 的位置即可。以 Claude Code 為例：
+最快的方式是交給你的 coding agent。把下面這一行貼給 Claude Code、Codex、Gemini
+或任何能執行 shell 指令的 agent：
+
+```text
+幫我安裝 git-worklog 這個 agent skill：下載 https://github.com/g761007/git-worklog/releases/latest/download/skill.zip，解壓縮後把裡面的 git-worklog/ 資料夾放進你的使用者層級 skills 目錄（Claude Code 是 ~/.claude/skills/）；如果那裡已經有 git-worklog，先問我再取代。
+```
+
+這個連結永遠指向最新的 release，所以同一行也能用來升級既有的安裝。
+
+要自己動手的話：這個目錄本身就是 skill，把 `git-worklog/` 放到宿主會探索 skill 的位置即可。
+以 Claude Code 為例：
 
 ```bash
 # 使用者層級
