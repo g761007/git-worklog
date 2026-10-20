@@ -137,9 +137,18 @@ The same engine also ships a `git-worklog` command. **The skill does not need
 it** — it is for driving the deterministic parts yourself, from a terminal or
 from CI.
 
-The package is defined by the repository's root `pyproject.toml`, not by
-anything inside the skill folder, so install it from the repository: a copy of
-the skill, or `skill.zip`, has nothing to install. With
+The quickest way is to let your coding agent install it. Paste this one line:
+
+```text
+Install the git-worklog CLI for me: find the latest release tag at https://github.com/g761007/git-worklog/releases and run uv tool install "git+https://github.com/g761007/git-worklog@<that tag>" (add --force if git-worklog is already installed; if uv is missing, ask me before installing it), then run git-worklog version to confirm it is on my PATH.
+```
+
+It always picks the newest release, so the same line also upgrades an existing
+install.
+
+To do it by hand: the package is defined by the repository's root
+`pyproject.toml`, not by anything inside the skill folder, so install it from
+the repository: a copy of the skill, or `skill.zip`, has nothing to install. With
 [uv](https://docs.astral.sh/uv/), which gives the command an environment of its
 own and puts it on your PATH:
 
@@ -605,8 +614,16 @@ ln -s "$(pwd)/git-worklog" ~/.claude/skills/git-worklog
 同一套引擎另外提供 `git-worklog` 指令。**skill 不需要它**——它是給你在終端機或 CI
 裡自行驅動確定性部分用的。
 
-這個套件是由 repo 根目錄的 `pyproject.toml` 定義的，不在 skill 資料夾裡，所以要從
-repo 安裝：skill 的複本或 `skill.zip` 裡沒有可以安裝的東西。建議用
+最快的方式是交給你的 coding agent 安裝。把下面這一行貼給它：
+
+```text
+幫我安裝 git-worklog CLI：到 https://github.com/g761007/git-worklog/releases 找最新的 release tag，執行 uv tool install "git+https://github.com/g761007/git-worklog@<那個 tag>"（如果已經裝過就加上 --force；如果沒有 uv，先問我再安裝），最後執行 git-worklog version 確認它已在 PATH 上。
+```
+
+它一律安裝最新的 release，所以同一行也能用來升級既有的安裝。
+
+要自己動手的話：這個套件是由 repo 根目錄的 `pyproject.toml` 定義的，不在 skill
+資料夾裡，所以要從 repo 安裝：skill 的複本或 `skill.zip` 裡沒有可以安裝的東西。建議用
 [uv](https://docs.astral.sh/uv/)，它會替這個指令建立獨立的環境，並放進你的 PATH：
 
 ```bash
