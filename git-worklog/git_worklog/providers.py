@@ -3,17 +3,26 @@
 The Git Worklog orchestrator runs under exactly one host — Claude Code
 (``anthropic``), Codex (``openai``), or Gemini (``google``) — and every Day
 Subagent and Code Analysis Subagent for a run executes on that host's single
-model. This is the deterministic, single-source resolver: it reads
-``git_worklog/data/provider_models.json`` (the only machine-readable model
-source), selects the entry for the given host, and applies the override
+model. This is the deterministic, single-source resolver: it reads the model
+table, selects the entry for the given host, and applies the override
 precedence.
+
+**The table is the user's file.** Models are renamed and retired faster than a
+tool should have to be released, so the table that is read is
+``~/.git-worklog/provider_models.json`` (:func:`git_worklog.paths.models_path`),
+not the one inside the package. The packaged
+``git_worklog/data/provider_models.json`` is only the seed: the first time a
+model is resolved it is copied out, and from then on the copy is read and
+never rewritten -- not by a run, not by an upgrade. A newer release that ships
+newer defaults therefore changes nothing for someone who already has the file;
+``git-worklog doctor`` is what tells them the two differ.
 
 Override precedence for the model id (highest first):
 
   1. ``model`` (explicit runtime/CLI model id)
   2. environment variable ``GIT_WORKLOG_<HOST>_MODEL`` (or the deprecated
      ``REPO_WORKLOG_<HOST>_MODEL``)
-  3. the provider default in ``git_worklog/data/provider_models.json``
+  3. the provider default in the user's ``provider_models.json``
 
 The host is NEVER guessed: a missing or unknown host is a configuration error,
 never a silent pick of the first provider. A model that cannot be resolved (empty
@@ -28,6 +37,9 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
+
+from git_worklog import paths
 
 VALID_HOSTS = ("anthropic", "openai", "google")
 
@@ -62,6 +74,90 @@ def default_config_path() -> str:
     """
     return os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "data", "provider_models.json")
+
+
+USER_COMMENT = (
+    "Subagent models per host, read by git-worklog on every run. This file is "
+    "yours: edit model_id / escalation_model_id (and display_name) when a "
+    "provider renames or retires a model. git-worklog copied it from its "
+    "shipped defaults once and never rewrites it on its own; `git-worklog models "
+    "--host <host> --model <id> --apply` is the same edit as a command. "
+    "`git-worklog doctor` lists "
+    "where it differs from the defaults of the installed version; delete the "
+    "file to start again from those.")
+
+
+def write_user_config(config: dict) -> str:
+    """Write ``config`` as the user's model table, whole or not at all."""
+    path = paths.models_path()
+    paths.ensure_dir(os.path.dirname(path))
+    fd, staged = tempfile.mkstemp(prefix=".rw-models-", dir=os.path.dirname(path))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(config, fh, ensure_ascii=False, indent=2)
+            fh.write("\n")
+        os.replace(staged, path)   # two first runs at once: either copy is right
+    except BaseException:
+        os.unlink(staged)
+        raise
+    return path
+
+
+def seed() -> dict:
+    """What a new user table holds: the shipped defaults, addressed to the user."""
+    return dict(load_config(default_config_path()), _comment=USER_COMMENT)
+
+
+def ensure_user_config() -> "tuple[str, dict | None]":
+    """The path of the model table to read, seeding the user's copy if absent.
+
+    Returns ``(path, notice)``. Seeding is reported, once, as
+    ``USER_MODELS_CREATED``: the shipped defaults are as old as the release they
+    came in, and the moment the file appears is the moment to ask the user
+    whether the host has newer models. The notice carries that instruction
+    itself, because the agent reading this output is the one who has to ask.
+
+    When the copy cannot be written -- a read-only home, a sandbox -- the
+    shipped table is read instead and ``USER_MODELS_NOT_WRITTEN`` says so: a run
+    still resolves a model, and the user learns why their file is not there to
+    edit.
+    """
+    path = paths.models_path()
+    if os.path.exists(path):
+        return path, None
+    try:
+        write_user_config(seed())
+    except OSError as exc:
+        return default_config_path(), {
+            "code": "USER_MODELS_NOT_WRITTEN",
+            "message": f"{path} could not be created ({exc}); the shipped model "
+                       "defaults were used for this run.",
+            "target": path,
+        }
+    return path, {
+        "code": "USER_MODELS_CREATED",
+        "message": f"{path} did not exist and was created from the defaults shipped "
+                   "with this version, which may be older than the models the host "
+                   "offers now. Before going on, ask the user whether to update it "
+                   "to the host's current models; if they agree, look up the "
+                   "host's current model ids and write them with `git-worklog "
+                   "models --host <host> --model <id> --escalation-model <id> "
+                   "--apply`. It is the user's file and is never rewritten for them.",
+        "target": path,
+    }
+
+
+def differences(user: dict, shipped: dict) -> "list[dict]":
+    """Where the user's providers differ from the shipped ones, field by field."""
+    out = []
+    ours, theirs = user.get("providers") or {}, shipped.get("providers") or {}
+    for host in sorted(set(ours) | set(theirs)):
+        a, b = ours.get(host) or {}, theirs.get(host) or {}
+        for field in sorted(set(a) | set(b)):
+            if a.get(field) != b.get(field):
+                out.append({"provider": host, "field": field,
+                            "yours": a.get(field), "shipped": b.get(field)})
+    return out
 
 
 def env_var(host: str) -> str:
@@ -106,23 +202,40 @@ def _candidates(providers: dict) -> list:
 
 
 def load_config(path: "str | None" = None) -> dict:
-    """Read the single source of truth. Raises ProviderError if unusable."""
+    """Read a model table. Raises ProviderError if it is unusable.
+
+    A table that cannot be read is an error and never a reason to read another
+    one: quietly falling back to the shipped defaults would swap the model the
+    user chose for one they did not.
+    """
     path = path or default_config_path()
     try:
         with open(path, "r", encoding="utf-8") as fh:
-            return json.load(fh)
+            config = json.load(fh)
     except FileNotFoundError:
         raise ProviderError("CONFIG_NOT_FOUND",
-                            f"Provider model config not found: {path}")
-    except (json.JSONDecodeError, OSError) as exc:
+                            f"Provider model config not found: {path}", target=path)
+    except (ValueError, OSError) as exc:
         raise ProviderError("CONFIG_ERROR",
-                            f"Could not read provider model config: {exc}")
+                            f"Could not read provider model config {path}: {exc}",
+                            target=path)
+    if not isinstance(config, dict) or not isinstance(config.get("providers"), dict):
+        raise ProviderError("CONFIG_ERROR",
+                            f"{path} has no \"providers\" object.", target=path)
+    return config
 
 
 def resolve(host: "str | None", model: "str | None" = None,
             reasoning_effort: "str | None" = None, escalate: bool = False,
             config_path: "str | None" = None) -> dict:
-    """Resolve ``host`` to its model. Raises ProviderError on any config fault."""
+    """Resolve ``host`` to its model. Raises ProviderError on any config fault.
+
+    With no ``config_path`` the user's table is read, and seeded first if it
+    does not exist yet. An explicit path is read as given and seeds nothing.
+    """
+    seed_warning = None
+    if config_path is None:
+        config_path, seed_warning = ensure_user_config()
     config = load_config(config_path)
     providers = config.get("providers") or {}
 
@@ -194,6 +307,7 @@ def resolve(host: "str | None", model: "str | None" = None,
         "escalated": escalating,
         "model": resolved_model,
         "model_id_source": source,
+        "config_path": config_path,
         "escalation": {
             "available": bool(escalation_id),
             "model_id": escalation_id,
@@ -215,6 +329,8 @@ def resolve(host: "str | None", model: "str | None" = None,
             "deprecated": deprecated_var,
             "replacement": env_var(host),
         }]
+    if seed_warning:
+        result.setdefault("warnings", []).append(seed_warning)
     esc_effort = entry.get("escalation_reasoning_effort")
     if esc_effort:
         result["escalation"]["reasoning_effort"] = esc_effort

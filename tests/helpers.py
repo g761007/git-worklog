@@ -15,9 +15,20 @@ import subprocess
 import sys
 import tempfile
 
+import atexit
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKILL_ROOT = os.path.join(ROOT, "git-worklog")
 SCRIPTS = os.path.join(SKILL_ROOT, "scripts")
+
+# The tool keeps user-level state under ~/.git-worklog/ -- previews, and the
+# user's own model table, which it reads in preference to the shipped one. A
+# test run must neither write there nor be steered by what the developer keeps
+# there, so the whole run, and every subprocess it starts, gets a throwaway
+# HOME. HOME rather than GIT_WORKLOG_HOME: some tests set and then clear that
+# variable, and others check what happens when it is not set at all.
+os.environ["HOME"] = tempfile.mkdtemp(prefix="gw_test_home_")
+atexit.register(shutil.rmtree, os.environ["HOME"], True)
 
 sys.path.insert(0, SCRIPTS)
 import worklog_markers as wm  # noqa: E402

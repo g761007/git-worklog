@@ -22,7 +22,7 @@ import sys
 
 from git_worklog import config, language
 from git_worklog import markers as wm
-from git_worklog import paths
+from git_worklog import paths, providers
 
 # git log --since-as-filter, which the collector relies on, landed in 2.37.
 MIN_GIT = (2, 37)
@@ -253,6 +253,38 @@ def _check_legacy_state_dir() -> dict:
     return _check("legacy_state_dir", "ok", "No leftover state directory.", value=None)
 
 
+def _check_provider_models() -> dict:
+    """The user's model table against the defaults this version ships.
+
+    Differing is not a fault -- editing that file is how a model is changed --
+    so it is a warning that names each difference: the same list serves someone
+    who edited on purpose and someone whose copy an upgrade has left behind.
+    """
+    path = paths.models_path()
+    if not os.path.exists(path):
+        return _check("provider_models", "ok",
+                      f"{path} does not exist yet; it is created from the shipped "
+                      "defaults the first time a model is resolved. Those may be "
+                      "older than what your host offers: `git-worklog models` sets "
+                      "the current ones.", value=path)
+    try:
+        user = providers.load_config(path)
+    except providers.ProviderError as exc:
+        return _check("provider_models", "fail",
+                      f"{exc.message} Fix it, or delete it to start again from the "
+                      "shipped defaults.", value=path)
+    differ = providers.differences(user, providers.load_config())
+    if not differ:
+        return _check("provider_models", "ok",
+                      f"{path} matches the shipped defaults.", value=path)
+    listed = "; ".join(f"{d['provider']}.{d['field']}: yours {d['yours']!r}, "
+                       f"shipped {d['shipped']!r}" for d in differ)
+    return _check("provider_models", "warn",
+                  f"{path} differs from the shipped defaults ({listed}). Your file "
+                  "is the one used; edit it if these are not the models you want.",
+                  value=path, differences=differ)
+
+
 def _check_skill_compat() -> dict:
     from git_worklog.cli.version import SKILL_COMPAT_VERSION
     skill_md = os.path.join(os.path.dirname(os.path.dirname(
@@ -282,6 +314,7 @@ def run(args) -> "tuple[dict, int]":
     checks.append(_check_config(worklog_dir))
     checks.append(_check_state_dir())
     checks.append(_check_legacy_state_dir())
+    checks.append(_check_provider_models())
     checks.append(_check_skill_compat())
     checks.append(_check_language(worklog_dir))
     checks.append(_check_index_language(worklog_dir))

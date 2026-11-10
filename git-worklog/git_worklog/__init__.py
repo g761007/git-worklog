@@ -46,7 +46,10 @@ PATH.
 # 1.5.0 is a minor bump by the plain rule: `view` gained a flag (`--serve`) and
 # its JSON gained fields (`commit_count`, `serving`). The commit drawer alone
 # would have read as page output, like 1.3.1; a server mode does not.
-__version__ = "1.5.0"
+#
+# 1.6.0 is a minor bump by the plain rule again: a new command (`models`), and
+# the model table a run reads moved from the package to the user's own file.
+__version__ = "1.6.0"
 
 # On-disk layout version of `.git-worklog/`, re-exported for convenience. It
 # describes the *data*, not the tool, and bumps only when a migration is needed.

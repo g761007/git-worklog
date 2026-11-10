@@ -311,9 +311,28 @@ large to search in full — do not fail a day at all: they are listed under
 `unverified`, printed, and the run stays complete. Output fields and the check
 mechanics: `references/analysis-pipeline.md` §6.
 
-Model per host is resolved by `--host` (cost-first defaults, single source
-`git_worklog/data/provider_models.json`); read `model` back off prepare's output.
-Overrides, the per-host table, unavailable-model handling and opt-in escalation:
+Model per host is resolved by `--host` from the user's own table,
+`~/.git-worklog/provider_models.json` (seeded from the shipped cost-first
+defaults on first use, never rewritten after); read `model` back off prepare's
+output.
+
+**Updating the models is your job when the user wants it, and you do not need a
+document for it.** Two things start it: prepare reports `USER_MODELS_CREATED`
+(the file was just created from shipped defaults, which age) — stop and ask the
+user whether to update before analysing — or the user simply asks. Then:
+
+1. Find the current models of the host you are running under: the models it
+   lists for you, or the provider's own model page. Never make up an id from a
+   naming pattern; if you cannot establish one, say so and ask.
+2. Keep the roles. `--model` is the host's current **cost-first** model (the
+   Haiku / Luna / Flash tier) and `--escalation-model` its mid tier. Your own
+   model is usually neither.
+3. `git-worklog models --host <host> --model <id> --escalation-model <id>` is a
+   dry-run: show the user the before/after. Add `--apply` only once they agree,
+   then run prepare again so the run uses the new model.
+
+If they decline, carry on with what the file has. Overrides for a single run,
+the shipped defaults, unavailable-model handling and opt-in escalation:
 `references/provider-models.md`.
 
 ---
@@ -513,4 +532,5 @@ is the whole surface you need; there is nothing in `scripts/` that is not here.
 | `doctor` | Is this environment able to run the tool? |
 | `validate` | Is the worklog on disk well-formed? Day markers, index links, config, language stamps |
 | `view` | Render the worklog as one self-contained HTML page and open it in the browser. Read-only; for the user to read, never a step of a flow. Never run `view --serve` yourself: it is a server that does not return until interrupted |
+| `models` | Show the user's subagent model table, or change one host's models in it. Dry-run unless `--apply`; only on the user's request, and only after they have seen the dry-run |
 | `version` | CLI / layout / config-schema versions |

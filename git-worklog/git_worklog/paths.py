@@ -32,6 +32,11 @@ TMP_SUBDIR = "tmp"
 # deleting them loses nothing: the next `view` writes them again.
 VIEW_SUBDIR = "view"
 
+# The user's own copy of the subagent model table. Seeded from the shipped one
+# the first time a model is resolved and never rewritten after that, so a new
+# model id is an edit to this file rather than a release of the tool.
+MODELS_FILENAME = "provider_models.json"
+
 # Owner-only: these files quote source code and diffs from private repositories.
 DIR_MODE = 0o700
 
@@ -63,6 +68,10 @@ def tmp_dir() -> str:
 
 def view_dir() -> str:
     return os.path.join(home(), VIEW_SUBDIR)
+
+
+def models_path() -> str:
+    return os.path.join(home(), MODELS_FILENAME)
 
 
 def ensure_dir(path: str) -> str:
