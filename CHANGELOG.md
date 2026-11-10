@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-10
+
 ### Added
 
 - **A commit hash in `view` opens its commit.** Clicking a badge slides a
@@ -1096,7 +1098,8 @@ satisfied.
 - A stdlib-only `unittest` suite and GitHub Actions CI on Python 3.9 / 3.12 / 3.13,
   with a `skill.zip` release artifact.
 
-[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/g761007/git-worklog/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/g761007/git-worklog/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/g761007/git-worklog/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/g761007/git-worklog/compare/v1.2.2...v1.3.0
