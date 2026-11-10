@@ -7,7 +7,10 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest: setup-python has no Python 3.9 for Ubuntu 26.04,
+    # and 3.9 is the floor this project declares. The jobs below pin for the
+    # same reason.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -62,7 +65,7 @@ jobs:
   package:
     # Packaging breaks quietly and only at install time, so build and install it
     # for real rather than trusting pyproject to be right.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -103,7 +106,7 @@ jobs:
     # unzip and use, with nothing installed -- which is how the skill is actually
     # distributed, and the property the whole layout is arranged to protect.
     # A broken zip is invisible until a release, so build it on every PR.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
