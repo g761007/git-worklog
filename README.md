@@ -255,6 +255,8 @@ or missing from a shallow clone) copies itself instead.
 
 ![One day: its summary, a table of contents, and every work item as a card with its field labels](docs/images/view-day.png)
 
+![A commit opened from its hash: the drawer beside the day shows the message, the files changed and, under --serve, one file's diff](docs/images/view-commit.png)
+
 ```bash
 git-worklog view                          # from the repository root
 git-worklog view --no-open                # write the page, start no browser
@@ -729,6 +731,8 @@ git-worklog apply --preview-id <preview_id>
 ![總覽：統計、依每日工作項目數著色的活動日曆，以及每一天摘要的時間軸](docs/images/view-overview.png)
 
 ![單日頁：當日摘要、本日目錄，以及每個工作項目的卡片與欄位標籤](docs/images/view-day.png)
+
+![從 hash 打開的 commit：單日頁旁的抽屜顯示訊息、變更的檔案，以及在 --serve 下展開的單檔 diff](docs/images/view-commit.png)
 
 ```bash
 git-worklog view                          # 在 repo 根目錄執行
