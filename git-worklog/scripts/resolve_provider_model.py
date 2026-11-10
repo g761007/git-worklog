@@ -56,8 +56,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--escalate", action="store_true",
                    help="Select the provider's escalation_model_id. Opt-in only, "
                         "used after the user approves an escalation re-run.")
-    p.add_argument("--config", default=providers.default_config_path(),
-                   help="Path to provider_models.json (default: ../config/).")
+    p.add_argument("--config", default=None,
+                   help="Path to a provider_models.json to read as given "
+                        "(default: the user's ~/.git-worklog/provider_models.json, "
+                        "created from the shipped defaults when absent).")
     return p
 
 

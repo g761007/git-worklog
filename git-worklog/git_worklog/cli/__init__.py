@@ -305,6 +305,24 @@ def build_parser() -> argparse.ArgumentParser:
     ri.add_argument("--apply", action="store_true",
                     help="Write index.md. Without this the run is a dry-run.")
 
+    md = sub.add_parser("models",
+                        help="Show the user's subagent model table "
+                             "(~/.git-worklog/provider_models.json), or change "
+                             "one host's models in it (dry-run by default).")
+    md.add_argument("--host", help="The host whose models to change: "
+                                   "anthropic | openai | google.")
+    md.add_argument("--model", help="The host's default subagent model id.")
+    md.add_argument("--display-name", dest="display_name",
+                    help="Human label for --model (default: the model id).")
+    md.add_argument("--reasoning-effort", dest="reasoning_effort",
+                    help="Reasoning effort for --model (openai).")
+    md.add_argument("--escalation-model", dest="escalation_model",
+                    help="The host's escalation model id.")
+    md.add_argument("--escalation-reasoning-effort", dest="escalation_reasoning_effort",
+                    help="Reasoning effort for --escalation-model (openai).")
+    md.add_argument("--apply", action="store_true",
+                    help="Write the change. Without this the run is a dry-run.")
+
     vw = sub.add_parser("view",
                         help="Show the worklog as one HTML page in a browser "
                              "(read-only).")
@@ -358,6 +376,8 @@ def main(argv: "list[str] | None" = None) -> int:
         from git_worklog.cli import migrate as cmd
     elif args.command == "reindex":
         from git_worklog.cli import reindex as cmd
+    elif args.command == "models":
+        from git_worklog.cli import models as cmd
     elif args.command == "view":
         from git_worklog.cli import view as cmd
     else:
