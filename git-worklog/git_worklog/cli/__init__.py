@@ -310,10 +310,15 @@ def build_parser() -> argparse.ArgumentParser:
                              "(read-only).")
     vw.add_argument("--repo", default=".", help="Repository to show (default: cwd).")
     vw.add_argument("--dir", help=f"Worklog directory (default: <repo>/{wm.WORKLOG_DIRNAME}).")
-    vw.add_argument("--output", metavar="FILE",
-                    help="Where to write the page (default: ~/.git-worklog/view/"
-                         "<project>-<hash>.html, the same file every run). "
-                         "Refused inside the worklog directory.")
+    where = vw.add_mutually_exclusive_group()
+    where.add_argument("--output", metavar="FILE",
+                       help="Where to write the page (default: ~/.git-worklog/view/"
+                            "<project>-<hash>.html, the same file every run). "
+                            "Refused inside the worklog directory.")
+    where.add_argument("--serve", action="store_true",
+                       help="Serve the page on 127.0.0.1 instead of writing it, "
+                            "so that it can show each commit's diff. Runs until "
+                            "interrupted (Ctrl+C).")
     vw.add_argument("--no-open", action="store_true",
                     help="Write the page without opening a browser.")
     return p
@@ -383,4 +388,7 @@ def main(argv: "list[str] | None" = None) -> int:
     payload.setdefault("interface_language", interface.resolved)
 
     _emit(payload, args.text, cmd.render_text)
-    return code
+    # `view --serve` answers first and then stays: the one command that outlives
+    # its own output.
+    after = getattr(cmd, "after_emit", None)
+    return after(args, payload, code) if after else code

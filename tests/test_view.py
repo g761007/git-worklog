@@ -6,26 +6,37 @@ verified by hand in a browser, because a JS test runner would cost the
 zero-dependency install. What these tests pin hardest is what the page must
 never do: let a day file's text become markup, write into the repository or its
 worklog, or let a browser's output into the JSON on stdout.
+
+The same goes for the commits behind the hashes: the drawer that shows one is
+script, checked by hand, but what it is given -- which commits, in what form --
+and what ``view --serve`` will and will not answer are checked here.
 """
 
 from __future__ import annotations
 
 import base64
 import hashlib
+import http.client
 import json
 import os
 import re
+import signal
 import stat
+import subprocess
+import sys
 import tempfile
+import threading
 import types
 import unittest
+import urllib.request
 from unittest import mock
 
 import helpers  # noqa: F401  (bootstraps sys.path for the git_worklog package)
-from helpers import ROOT, rmtree, run_cli
+from helpers import ROOT, SKILL_ROOT, make_history_repo, rmtree, run_cli
 
 from git_worklog import markers as wm
-from git_worklog import mdhtml, viewer
+from git_worklog import mdhtml, viewer, viewserver
+from git_worklog.analysis import commits as gitcommits
 from git_worklog.analysis.reconcile import cited_hashes
 from git_worklog.cli import view as view_cmd
 
@@ -84,9 +95,12 @@ class Raw:
 
 
 def make_worklog(days: dict, *, index: "str | None" = None, legacy: bool = False,
-                 config: "dict | None" = None) -> str:
-    """A repository directory holding a worklog with ``days``; returns the repo."""
-    repo = tempfile.mkdtemp(prefix="gw_view_")
+                 config: "dict | None" = None, repo: "str | None" = None) -> str:
+    """A repository directory holding a worklog with ``days``; returns the repo.
+
+    The directory is not a Git repository unless ``repo`` hands one in.
+    """
+    repo = repo or tempfile.mkdtemp(prefix="gw_view_")
     worklog = os.path.join(repo, wm.WORKLOG_DIRNAME)
     days_dir = worklog if legacy else os.path.join(worklog, wm.DAYS_SUBDIR)
     os.makedirs(days_dir)
@@ -485,6 +499,251 @@ class TestViewCommand(unittest.TestCase):
                  PYTHONHASHSEED="2")
         with open(first, "rb") as a, open(second, "rb") as b:
             self.assertEqual(a.read(), b.read())
+
+
+HOSTILE_SUBJECT = "fix: </script><script>alert(1)</script> <!-- and <b>more</b>"
+
+
+def git_out(repo: str, *args: str) -> str:
+    return subprocess.run(["git", "-C", repo, *args], check=True, capture_output=True,
+                          text=True).stdout.strip()
+
+
+def commit_data(page: str) -> dict:
+    blob = re.search(r'<script type="application/json" id="commits">(.*?)</script>',
+                     page, re.S)
+    return json.loads(blob.group(1))
+
+
+class CitedRepo(unittest.TestCase):
+    """A real repository whose worklog cites four of its six commits."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.repo = make_history_repo()
+        cls.addClassCleanup(rmtree, cls.repo)
+        helpers._write(cls.repo, "notes.txt", "x\n")
+        helpers._commit(cls.repo, "2026-07-13T10:00:00+08:00", HOSTILE_SUBJECT)
+        (cls.add, cls.cache, cls.fix, cls.revert, cls.rename,
+         cls.hostile) = git_out(cls.repo, "log", "--reverse", "--format=%H").split()
+        make_worklog({
+            # The second hash is written the way Chinese prose writes one: with
+            # no space on either side, which only the renderer's scan finds.
+            "2026-07-10": "## 當日摘要\n\nCache work.\n\n## 主要異動\n\n### Cache\n\n"
+                          f"- **相關 commits：** {cls.revert[:7]} (Fixture Bot) revert；"
+                          f"修正了{cls.fix[:8]}的問題\n",
+            "2026-07-12": "## 當日摘要\n\nRename.\n\n## 主要異動\n\n### Rename\n\n"
+                          f"- **相關 commits：** {cls.rename[:7]} (Fixture Bot) refactor；"
+                          f"{cls.hostile[:7]} (Fixture Bot) fix\n",
+        }, repo=cls.repo)
+        cls.worklog = os.path.join(cls.repo, wm.WORKLOG_DIRNAME)
+        cls.cited = {cls.fix, cls.revert, cls.rename, cls.hostile}
+
+
+class TestCitedCommits(CitedRepo):
+    """What Git says about a cited commit, and that nothing else is asked."""
+
+    def test_git_describes_the_commits_it_is_asked_about(self):
+        commits, tokens = gitcommits.collect(
+            self.repo, [self.revert[:7], self.rename[:7], self.add, "abcdef1",
+                        self.fix[:7].upper()])
+        self.assertEqual(tokens, {self.revert[:7]: self.revert, self.rename[:7]: self.rename,
+                                  self.add: self.add, self.fix[:7]: self.fix})
+        revert = commits[self.revert]
+        self.assertEqual((revert["subject"], revert["body"], revert["author"]),
+                         ("revert: drop cache layer",
+                          "This reverts commit adding src/cache.py", "Fixture Bot"))
+        self.assertTrue(revert["date"].startswith("2026-07-10T15:00:00"))
+        self.assertEqual(revert["files"], [{"path": "src/cache.py", "old_path": None,
+                                            "additions": 0, "deletions": 4}])
+        self.assertEqual((revert["file_count"], revert["additions"], revert["deletions"]),
+                         (1, 0, 4))
+        renamed = {f["path"]: f for f in commits[self.rename]["files"]}
+        self.assertEqual(renamed["src/math_utils.py"]["old_path"], "src/calc.py")
+        self.assertIsNone(renamed["assets/logo.png"]["additions"])   # binary
+        # The root commit has no parent to be diffed against, and still lists its file.
+        self.assertEqual([f["path"] for f in commits[self.add]["files"]], ["src/calc.py"])
+
+    def test_only_the_repository_the_worklog_sits_in_is_asked(self):
+        # Git would happily answer from a parent repository; that one is not ours.
+        self.assertEqual(gitcommits.collect(os.path.join(self.repo, "src"), [self.revert[:7]]),
+                         ({}, {}))
+        plain = tempfile.mkdtemp(prefix="gw_view_plain_")
+        self.addCleanup(rmtree, plain)
+        self.assertEqual(gitcommits.collect(plain, [self.revert[:7]]), ({}, {}))
+
+    def test_a_commit_with_too_many_files_is_listed_in_part_and_counted_in_full(self):
+        with mock.patch.object(gitcommits, "MAX_FILES", 1):
+            commit = gitcommits.collect(self.repo, [self.rename])[0][self.rename]
+        self.assertEqual((len(commit["files"]), commit["file_count"]), (1, 2))
+
+    def test_the_page_carries_the_cited_commits_and_no_others(self):
+        page, info = viewer.build(self.worklog, repo=self.repo)
+        data = commit_data(page)
+        self.assertEqual(set(data["commits"]), self.cited)
+        self.assertEqual(info["commit_count"], 4)
+        self.assertEqual(data["tokens"][self.fix[:8]], self.fix)   # glued to Chinese text
+        self.assertEqual(set(data["tokens"].values()), self.cited)
+        # The page is not a history browser: an uncited commit is nowhere on it.
+        self.assertNotIn("feat: add cache layer", page)
+        self.assertNotIn(self.cache, page)
+        self.assertEqual(page, viewer.build(self.worklog, repo=self.repo)[0])
+
+    def test_a_commit_message_cannot_leave_its_data_block(self):
+        page, _ = viewer.build(self.worklog, repo=self.repo)
+        blob = page.split('<script type="application/json" id="commits">', 1)[1]
+        blob = blob.split("</script>", 1)[0]
+        self.assertNotIn("<", blob)
+        self.assertEqual(commit_data(page)["commits"][self.hostile]["subject"], HOSTILE_SUBJECT)
+        self.assertEqual(page.count("<script>"), 1)     # still the only one that runs
+        self.assertEqual(page.count("<script"), 2)
+
+    def test_without_git_the_page_is_what_it_was(self):
+        page, info = viewer.build(self.worklog)
+        self.assertEqual(info["commit_count"], 0)
+        self.assertNotIn('id="commits"', page)
+        plain = make_worklog({"2026-07-15": MARKED})
+        self.addCleanup(rmtree, plain)
+        page, info = viewer.build(os.path.join(plain, wm.WORKLOG_DIRNAME), repo=plain)
+        self.assertEqual((info["commit_count"], info["warnings"]), (0, []))
+        self.assertNotIn('id="commits"', page)
+
+    def test_only_a_served_page_may_fetch(self):
+        static, _ = viewer.build(self.worklog, repo=self.repo)
+        served, _ = viewer.build(self.worklog, repo=self.repo, diff_base="diff/")
+        policy = r'http-equiv="Content-Security-Policy" content="([^"]*)"'
+        self.assertNotIn("connect-src", re.search(policy, static).group(1))
+        self.assertIn("connect-src 'self'", re.search(policy, served).group(1))
+        self.assertNotIn("data-diff=", static.split("<style>", 1)[0])
+        self.assertIn('<html lang="en" data-diff="diff/">', served)
+        self.assertEqual(page_script(static), page_script(served))   # one script, one hash
+
+    def test_the_command_reports_how_many_commits_it_found(self):
+        home = tempfile.mkdtemp(prefix="gw_view_home_")
+        self.addCleanup(rmtree, home)
+        before = snapshot(self.repo)
+        payload, rc, _ = run_cli("view", "--no-open", "--repo", self.repo,
+                                 env={"GIT_WORKLOG_HOME": home})
+        self.assertEqual((rc, payload["commit_count"]), (0, 4))
+        self.assertEqual(snapshot(self.repo), before)
+
+
+class TestViewServer(CitedRepo):
+    """``view --serve``: the page and its cited commits' diffs, to one caller."""
+
+    def setUp(self):
+        self.server = viewserver.Server(self.worklog, self.repo)
+        self.server.page()
+        thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+        self.port = self.server.server_port
+        self.base = f"/{self.server.token}/"
+
+    def request(self, path: str, *, host: "str | None" = None, method: str = "GET"):
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        self.addCleanup(conn.close)
+        conn.putrequest(method, path, skip_host=True)
+        conn.putheader("Host", host or f"127.0.0.1:{self.port}")
+        conn.endheaders()
+        response = conn.getresponse()
+        return response.status, response, response.read()
+
+    def test_it_listens_on_loopback_only(self):
+        self.assertEqual(self.server.server_address[0], "127.0.0.1")
+        self.assertEqual(self.server.url, f"http://127.0.0.1:{self.port}{self.base}")
+
+    def test_the_page_is_served_with_its_diffs_switched_on(self):
+        status, response, body = self.request(self.base)
+        self.assertEqual(status, 200)
+        self.assertIn('data-diff="diff/"', body.decode("utf-8"))
+        self.assertEqual(response.getheader("Cache-Control"), "no-store")
+        self.assertEqual(response.getheader("X-Content-Type-Options"), "nosniff")
+        self.assertEqual(response.getheader("Cross-Origin-Resource-Policy"), "same-origin")
+        self.assertFalse([h for h, _ in response.getheaders()
+                          if h.lower().startswith("access-control-")])
+
+    def test_a_cited_commits_diff_comes_one_file_at_a_time(self):
+        status, response, body = self.request(self.base + "diff/" + self.fix)
+        self.assertEqual(status, 200)
+        self.assertEqual(response.getheader("Content-Type"), "application/json; charset=utf-8")
+        self.assertEqual(response.getheader("X-Content-Type-Options"), "nosniff")
+        patch = json.loads(body)
+        self.assertEqual((len(patch["files"]), patch["truncated"]), (1, False))
+        self.assertTrue(patch["files"][0].startswith("diff --git a/src/cache.py"))
+        self.assertIn("\n-def get(k):\n", patch["files"][0])
+        self.assertIn("\n+def get(key):\n", patch["files"][0])
+        _, _, body = self.request(self.base + "diff/" + self.rename)
+        # As many pieces as the page lists files, so the two line up by position.
+        self.assertEqual(len(json.loads(body)["files"]), 2)
+
+    def test_a_commit_the_worklog_does_not_cite_is_not_served(self):
+        for name in (self.cache, self.add[:7], self.fix[:8], "HEAD", "../" + self.fix, ""):
+            with self.subTest(name=name):
+                self.assertEqual(self.request(self.base + "diff/" + name)[0], 404)
+
+    def test_the_token_is_the_way_in(self):
+        for path in ("/", "/wrong/", "/wrong/diff/" + self.fix, self.base.rstrip("/"),
+                     "/" + self.server.token[:-1] + "/"):
+            with self.subTest(path=path):
+                self.assertEqual(self.request(path)[0], 404)
+
+    def test_only_its_own_address_is_answered(self):
+        # A rebinding page reaches the port under its own hostname, and says so.
+        for host in ("evil.example", f"evil.example:{self.port}", f"localhost:{self.port}",
+                     "127.0.0.1"):
+            with self.subTest(host=host):
+                self.assertEqual(self.request(self.base, host=host)[0], 403)
+
+    def test_it_only_reads(self):
+        before = snapshot(self.repo)
+        self.assertEqual(self.request(self.base, method="POST")[0], 501)
+        self.request(self.base)
+        self.request(self.base + "diff/" + self.rename)
+        self.assertEqual(snapshot(self.repo), before)
+
+    def test_an_oversized_diff_is_cut_and_says_so(self):
+        with mock.patch.object(viewserver, "MAX_DIFF", 60):
+            patch = viewserver.diff(self.repo, self.rename)
+        self.assertTrue(patch["truncated"])
+        self.assertLessEqual(len("".join(patch["files"])), 60)
+
+    def test_serving_and_writing_a_file_do_not_combine(self):
+        payload, rc, stderr = run_cli("view", "--serve", "--output", "x.html",
+                                      "--repo", self.repo)
+        self.assertEqual((payload, rc), (None, 2))
+        self.assertIn("not allowed with", stderr)
+
+    @unittest.skipIf(sys.platform == "win32", "SIGINT cannot be sent to a child there")
+    def test_the_command_answers_first_and_serves_until_interrupted(self):
+        home = tempfile.mkdtemp(prefix="gw_view_home_")
+        self.addCleanup(rmtree, home)
+        env = dict(os.environ, PYTHONPATH=SKILL_ROOT, GIT_WORKLOG_HOME=home, BROWSER="true")
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "git_worklog", "view", "--serve", "--no-open",
+             "--repo", self.repo], stdout=subprocess.PIPE, env=env)
+        self.addCleanup(proc.wait)
+        self.addCleanup(proc.kill)
+        self.addCleanup(proc.stdout.close)
+        # The answer is whole before the first request is: read until it parses.
+        text, payload = "", None
+        while payload is None:
+            line = proc.stdout.readline().decode("utf-8")
+            self.assertTrue(line, f"stdout ended before one JSON object: {text!r}")
+            text += line
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError:
+                pass
+        self.assertEqual((payload["ok"], payload["serving"], payload["output"],
+                          payload["opened"], payload["commit_count"]),
+                         (True, True, None, False, 4))
+        with urllib.request.urlopen(payload["url"], timeout=10) as response:
+            self.assertEqual(response.status, 200)
+        self.assertEqual(os.listdir(home), [])          # served, not written
+        proc.send_signal(signal.SIGINT)
+        self.assertEqual(proc.wait(timeout=10), 0)
 
 
 class TestThisRepositorysWorklog(unittest.TestCase):

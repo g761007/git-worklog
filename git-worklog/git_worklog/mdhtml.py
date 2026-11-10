@@ -17,8 +17,9 @@ breaks kept. That is the safe way to be incomplete: an unsupported construct
 reads a little plainer, it never runs.
 
 Commit hashes become badges, because a worklog is mostly read to get from a
-sentence to the commit behind it: a ``<button>`` the page's script copies to
-the clipboard, or a plain ``<span>`` inside something that is itself a link. A
+sentence to the commit behind it: a ``<button>`` the page's script opens the
+commit from -- or copies to the clipboard, when Git did not know the hash -- or
+a plain ``<span>`` inside something that is itself a link. A
 token counts when it mixes digits and letters, or when it is written as the
 format's own commit reference, ``<hash> (<author>)`` (worklog-format.md §3). The
 first rule keeps numbers and all-hex words ("defaced") plain; the second catches
@@ -59,7 +60,7 @@ _DAY_LINK_RE = re.compile(r"^(?:\.{1,2}/)*(?:days/)?(\d{4}-\d{2}-\d{2})\.md$")
 # 7-40 lowercase hex characters not glued to a path, an identifier or a colour.
 # ASCII boundaries rather than \b, which treats CJK as word characters and would
 # miss a hash written directly against Chinese text.
-_HASH_RE = re.compile(r"(?<![0-9A-Za-z_./#-])[0-9a-f]{7,40}(?![0-9A-Za-z_-])")
+HASH_RE = re.compile(r"(?<![0-9A-Za-z_./#-])[0-9a-f]{7,40}(?![0-9A-Za-z_-])")
 _AUTHOR_AFTER_RE = re.compile(r"\s*[(（][^()（）\n]{1,80}[)）]")
 # Placeholders are NUL-delimited, and NUL is stripped from every input first,
 # so text can never forge one.
@@ -132,7 +133,7 @@ def inline(text: str, *, dates=frozenset(), links: bool = True) -> str:
     text = _IMAGE_RE.sub(image, text)
     text = _LINK_RE.sub(link, text)
     text = _AUTOLINK_RE.sub(autolink, text)
-    text = _HASH_RE.sub(commit, text)   # last: never inside code, a link or its URL
+    text = HASH_RE.sub(commit, text)   # last: never inside code, a link or its URL
     text = _emphasis(html.escape(text, quote=False))
     # A link label can hold a code span, so a slot can hold a slot.
     while _SLOT_RE.search(text):

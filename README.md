@@ -153,7 +153,7 @@ the repository: a copy of the skill, or `skill.zip`, has nothing to install. Wit
 own and puts it on your PATH:
 
 ```bash
-uv tool install "git+https://github.com/g761007/git-worklog@v1.4.0"
+uv tool install "git+https://github.com/g761007/git-worklog@v1.5.0"
 ```
 
 Put the release you want in the tag (see
@@ -246,22 +246,29 @@ an overview with counts, an activity calendar and a timeline; every day with its
 summary, a table of contents and collapsible work-item cards; and search across
 all of it. It follows your system's light or dark setting until you pick one
 with the switch in the top right, which the browser then remembers. Commit
-hashes show as badges: click one to copy it.
+hashes show as badges: click one and a drawer opens beside the text with that
+commit's message, author, date and the files it changed — and, when the page is
+served with `--serve`, each file's diff. A hash Git does not know (rebased away,
+or missing from a shallow clone) copies itself instead.
 
 ![The overview: counts, an activity calendar shaded by work items per day, and a timeline of every day's summary](docs/images/view-overview.png)
 
 ![One day: its summary, a table of contents, and every work item as a card with its field labels](docs/images/view-day.png)
 
+![A commit opened from its hash: the drawer beside the day shows the message, the files changed and, under --serve, one file's diff](docs/images/view-commit.png)
+
 ```bash
 git-worklog view                          # from the repository root
 git-worklog view --no-open                # write the page, start no browser
 git-worklog view --output handoff.html    # a copy to hand over
+git-worklog view --serve                  # serve it locally, with diffs; Ctrl+C stops
 ```
 
-It is read-only — nothing in the repository or the worklog is written — and it
-calls no git, so its numbers describe the worklog, not the repository: *commits
-cited* is what the prose mentions, and an empty calendar cell means "no day
-file", which is what a day nobody logged and a day without commits both look
+It is read-only — nothing in the repository or the worklog is written. Git is
+asked only about the commits the worklog cites, so the page is not a history
+browser, and its numbers still describe the worklog, not the repository:
+*commits cited* is what the prose mentions, and an empty calendar cell means "no
+day file", which is what a day nobody logged and a day without commits both look
 like (`coverage` is the command that tells them apart). The page goes to
 `~/.git-worklog/view/` under a name fixed per worklog, so re-running the command
 and reloading the tab refreshes it. It embeds the whole worklog, so it is
@@ -269,6 +276,16 @@ written owner-only; share an `--output` copy only where the source may be read.
 Everything a day file says is escaped before it is shown, and the page's
 Content-Security-Policy lets its one script run and nothing load, so a worklog
 that quotes `<script>` shows the text.
+
+Diffs are source code by the megabyte, so the page file never carries them.
+`--serve` writes no file: it serves the page on `127.0.0.1`, on a port the
+system picks, and reads a commit's diff from Git when you open it. It prints its
+JSON first — `url` is where the page is — and then runs until you interrupt it;
+reloading the tab rebuilds the page. The URL contains a token made for that run,
+because a local port is reachable by every user of the machine and the page file
+is owner-only: a request without the token, or one that names the server by any
+host other than `127.0.0.1`, is refused, and only commits the worklog cites can
+be asked for. `--serve` and `--output` do not combine.
 
 Two environments need `--output`. The Snap builds of Firefox and Chromium (the
 Ubuntu defaults) cannot read hidden directories in your home, so a page under
@@ -627,7 +644,7 @@ ln -s "$(pwd)/git-worklog" ~/.claude/skills/git-worklog
 [uv](https://docs.astral.sh/uv/)，它會替這個指令建立獨立的環境，並放進你的 PATH：
 
 ```bash
-uv tool install "git+https://github.com/g761007/git-worklog@v1.4.0"
+uv tool install "git+https://github.com/g761007/git-worklog@v1.5.0"
 ```
 
 tag 填你要的版本（見 [Releases](https://github.com/g761007/git-worklog/releases)）；
@@ -707,26 +724,39 @@ git-worklog apply --preview-id <preview_id>
 `view` 是唯一一個「給人讀」而不是給流程用的指令。它把 `.git-worklog/` 渲染成一個自含
 的 HTML 頁面並用瀏覽器開啟：總覽（統計、活動日曆、時間軸）、每一天的摘要、目錄與可收合
 的工作項目卡片，以及跨所有日誌的搜尋。頁面預設跟隨系統的淺色／深色設定；用右上角的按鈕
-切換之後，瀏覽器會記住你的選擇。commit hash 會顯示成 badge，點一下就能複製。
+切換之後，瀏覽器會記住你的選擇。commit hash 會顯示成 badge：點一下，內文旁會滑出抽屜，
+顯示該 commit 的訊息、作者、日期與變更的檔案——以 `--serve` 提供頁面時，還能展開每個檔案
+的 diff。Git 不認得的 hash（已被 rebase 掉，或淺層 clone 裡沒有）則維持點一下就複製。
 
 ![總覽：統計、依每日工作項目數著色的活動日曆，以及每一天摘要的時間軸](docs/images/view-overview.png)
 
 ![單日頁：當日摘要、本日目錄，以及每個工作項目的卡片與欄位標籤](docs/images/view-day.png)
 
+![從 hash 打開的 commit：單日頁旁的抽屜顯示訊息、變更的檔案，以及在 --serve 下展開的單檔 diff](docs/images/view-commit.png)
+
 ```bash
 git-worklog view                          # 在 repo 根目錄執行
 git-worklog view --no-open                # 只寫出頁面，不開瀏覽器
 git-worklog view --output handoff.html    # 匯出一份交接用的副本
+git-worklog view --serve                  # 在本機提供頁面（含 diff）；Ctrl+C 停止
 ```
 
-它是唯讀的——不寫 repo、也不寫工作日誌——而且不呼叫 git，所以頁面上的數字描述的是
-日誌，不是 repo：*commits cited* 是日誌文字提到的 commit；日曆上的空格代表「沒有日期
+它是唯讀的——不寫 repo、也不寫工作日誌。它只向 Git 查詢日誌引用到的 commit，所以頁面
+不是歷史瀏覽器，上面的數字描述的仍然是日誌，不是 repo：*commits cited* 是日誌文字提到的
+commit；日曆上的空格代表「沒有日期
 檔」，而「沒人記錄的那天」和「沒有 commit 的那天」看起來正是這個樣子（要分辨兩者請用
 `coverage`）。頁面寫到 `~/.git-worklog/view/`，每個工作日誌固定同一個檔名，所以重跑
 指令後重新整理分頁即可更新。頁面內含整份日誌，因此只有擁有者可讀；用 `--output` 匯出
 的副本，只該分享給本來就能讀原始碼的人。日期檔的所有內容在顯示前都會先跳脫，頁面的
 Content-Security-Policy 只允許它自己那一支 script 執行、不允許載入任何東西，所以引用了
 `<script>` 的日誌只會顯示成文字。
+
+diff 就是原始碼，而且動輒數 MB，所以頁面檔案從不內含 diff。`--serve` 不寫任何檔案：它在
+`127.0.0.1` 上以系統指派的 port 提供頁面，並在你打開某個 commit 時才向 Git 讀取它的
+diff。它會先印出 JSON——`url` 就是頁面位址——然後持續執行到被中斷為止；重新整理分頁就會
+重建頁面。網址內含這次執行專用的 token，因為本機 port 對同一台機器上的所有使用者開放，
+而頁面檔案只有擁有者可讀：沒帶 token 的請求、或用 `127.0.0.1` 以外的主機名稱指向伺服器
+的請求都會被拒絕，而且只能查詢日誌引用到的 commit。`--serve` 與 `--output` 不能並用。
 
 有兩種環境需要 `--output`。Ubuntu 預設的 Snap 版 Firefox／Chromium 讀不到家目錄下的
 隱藏目錄，放在 `~/.git-worklog/` 的頁面會顯示「存取遭拒」：請寫到看得見的位置。而在

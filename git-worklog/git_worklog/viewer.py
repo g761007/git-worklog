@@ -13,8 +13,8 @@ summary with or without SUMMARY markers; and its commits are counted with
 :func:`git_worklog.analysis.reconcile.cited_hashes`, the scan ``report`` uses,
 so the two commands cannot disagree about what a day cites.
 
-**Cited, not made.** The page reads day files and nothing else, so every number
-on it describes the worklog, not the repository. "Commits cited" is what the
+**Cited, not made.** Every number on the page comes from the day files, so it
+describes the worklog, not the repository. "Commits cited" is what the
 prose mentions -- on 2026-07-17 in this repository, 41 of the 52 commits made --
 and an empty calendar cell means "no day file", which a gap and a day without
 commits look exactly alike as. Telling those apart needs git: see ``coverage``.
@@ -23,12 +23,24 @@ commits look exactly alike as. Telling those apart needs git: see ``coverage``.
 the file (worklog-format.md §2); two days analysed together carry the same HEAD,
 so printing it beside a date would say something false about that date.
 
+**Commits, when Git has them.** Given the repository, the page also carries
+what Git records about each commit the worklog cites
+(:mod:`git_worklog.analysis.commits`): message, author, date and the files it
+touched. A hash badge then opens that commit in a drawer instead of copying
+itself. Only cited commits are embedded -- the page is not a history browser --
+and never their diffs, which are source code by the megabyte. Those are fetched
+on demand, and only by a page that ``view --serve`` is serving: such a page is
+told where (``data-diff``) and is allowed to ask its own origin, nothing wider.
+
 **One script, pinned.** Content goes through :mod:`git_worklog.mdhtml`, which
 never lets input become markup. The page's Content-Security-Policy then allows
 exactly one script, by hash, and no network access at all -- a backstop, so an
 escape that was ever missed still could not run or send anything anywhere.
 Navigation is CSS (``:target``), so the page reads fully without the script;
-the script adds search, keyboard shortcuts and the light/dark switch.
+the script adds search, keyboard shortcuts, the light/dark switch and the
+commit drawer. The commit data sits in a second ``<script>`` whose type makes
+it data, which no browser runs; ``<`` is escaped in it, so a commit message
+cannot end the block early.
 """
 
 from __future__ import annotations
@@ -37,6 +49,7 @@ import base64
 import datetime as dt
 import hashlib
 import html
+import json
 import os
 import re
 from dataclasses import dataclass, field
@@ -44,6 +57,7 @@ from dataclasses import dataclass, field
 from git_worklog import config as gwconfig
 from git_worklog import markers as wm
 from git_worklog import mdhtml
+from git_worklog.analysis import commits as gitcommits
 from git_worklog.analysis.reconcile import cited_hashes
 
 _WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
@@ -74,6 +88,7 @@ class Day:
     issues: "list[dict]"
     hashes: "frozenset[str]"  # cited commits, first 7 characters
     lead: str
+    tokens: "frozenset[str]" = frozenset()   # everything that may name a commit
 
     @property
     def items(self) -> int:
@@ -148,6 +163,17 @@ def lead_of(sections: "list[Section]", generated: str) -> str:
     return wm.summarise_generated(generated).replace("\\|", "|")
 
 
+def _tokens(text: str) -> "frozenset[str]":
+    """Every token in ``text`` that Git should be asked about.
+
+    Two scans, because they disagree at the edges: ``report``'s finds a hash in
+    capitals, the renderer's finds one written directly against Chinese text.
+    The union covers whatever the renderer will turn into a badge.
+    """
+    return frozenset(cited_hashes(text)) | frozenset(
+        m.group(0) for m in mdhtml.HASH_RE.finditer(text))
+
+
 def load_day(worklog_dir: str, date: str, layout: str) -> Day:
     path = wm.day_path(worklog_dir, date, layout)
     issues: "list[dict]" = []
@@ -173,7 +199,8 @@ def load_day(worklog_dir: str, date: str, layout: str) -> Day:
     sections = split_sections(parsed.generated)
     hashes = frozenset(h[:7] for h in cited_hashes(parsed.generated))
     return Day(date, path, sections, parsed.manual, None, issues, hashes,
-               lead_of(sections, parsed.generated))
+               lead_of(sections, parsed.generated),
+               _tokens(parsed.generated) | _tokens(parsed.manual))
 
 
 def _index(worklog_dir: str) -> "tuple[str, str | None, list[dict]]":
@@ -205,8 +232,14 @@ def _index(worklog_dir: str) -> "tuple[str, str | None, list[dict]]":
     return ("" if notes in placeholders else notes), lang, []
 
 
-def build(worklog_dir: str) -> "tuple[str, dict]":
-    """The page for ``worklog_dir``, and what the CLI reports about it."""
+def build(worklog_dir: str, *, repo: "str | None" = None,
+          diff_base: "str | None" = None) -> "tuple[str, dict]":
+    """The page for ``worklog_dir``, and what the CLI reports about it.
+
+    ``repo`` is the repository to ask about the commits the worklog cites; with
+    none, hash badges only copy. ``diff_base`` is the URL, relative to the page,
+    under which a server answers with a commit's diff.
+    """
     layout = wm.detect_layout(worklog_dir)
     dates = wm.list_day_dates(worklog_dir, layout)
     days = [load_day(worklog_dir, d, layout) for d in dates]
@@ -217,10 +250,17 @@ def build(worklog_dir: str) -> "tuple[str, dict]":
         warnings.extend(day.issues)
     real = os.path.realpath(worklog_dir)
     project = os.path.basename(os.path.dirname(real)) or "worklog"
-    page = _page(project, os.path.dirname(real), days, notes, lang)
+    commits, tokens = {}, {}
+    if repo is not None:
+        cited = _tokens(notes).union(*(d.tokens for d in days))
+        commits, tokens = gitcommits.collect(repo, cited)
+    page = _page(project, os.path.dirname(real), days, notes, lang,
+                 commits, tokens, diff_base)
     return page, {
         "layout": layout,
         "day_count": len(days),
+        "commit_count": len(commits),
+        "commits": frozenset(commits),
         "range": {"from": dates[0], "to": dates[-1]} if dates else None,
         "warnings": warnings,
     }
@@ -257,11 +297,25 @@ def script_hash() -> str:
     return "sha256-" + base64.b64encode(digest).decode("ascii")
 
 
+def _commit_data(commits: dict, tokens: dict) -> str:
+    """The cited commits as a JSON data block, or nothing when there are none."""
+    if not commits:
+        return ""
+    blob = json.dumps({"commits": commits, "tokens": tokens}, ensure_ascii=False,
+                      sort_keys=True, separators=(",", ":"))
+    # No "<" survives, so nothing a commit says can close the block or open a tag.
+    return ('<script type="application/json" id="commits">'
+            + blob.replace("<", "\\u003c") + "</script>\n")
+
+
 def _page(project: str, root: str, days: "list[Day]", notes: str,
-          lang: "str | None") -> str:
+          lang: "str | None", commits: dict, tokens: dict,
+          diff_base: "str | None") -> str:
     known = frozenset(d.date for d in days)
     csp = (f"default-src 'none'; script-src '{script_hash()}'; "
            "style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'")
+    if diff_base:
+        csp += "; connect-src 'self'"
     articles = []
     for i in range(len(days) - 1, -1, -1):          # newest first, like the index
         older = days[i - 1].date if i > 0 else None
@@ -292,9 +346,12 @@ def _page(project: str, root: str, days: "list[Day]", notes: str,
         "</div>",
         f'<footer class="foot">Rendered from {_n(len(days), "day file")}. '
         "Re-run <code>git-worklog view</code> to refresh.</footer>",
+        '<aside id="commit" class="drawer" role="dialog" aria-labelledby="commit-title" '
+        'tabindex="-1" hidden></aside>',
     ])
+    served = f' data-diff="{_e(diff_base)}"' if diff_base else ""
     return ("<!DOCTYPE html>\n"
-            '<html lang="en">\n<head>\n<meta charset="utf-8">\n'
+            f'<html lang="en"{served}>\n<head>\n<meta charset="utf-8">\n'
             f'<meta http-equiv="Content-Security-Policy" content="{csp}">\n'
             '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
             '<meta name="referrer" content="no-referrer">\n'
@@ -304,6 +361,7 @@ def _page(project: str, root: str, days: "list[Day]", notes: str,
             f"<script>{_JS}</script>\n"
             "</head>\n<body>\n"
             f"{body}\n"
+            f"{_commit_data(commits, tokens)}"
             "</body>\n</html>\n")
 
 
@@ -505,6 +563,7 @@ _DARK = """
     --muted: #aaa59c; --faint: #7c776f; --accent: #5dcaa5; --accent-bg: #11352b;
     --warn: #f3c77a; --warn-bg: #3a2a0c; --code: #292826; --mark: #6b5314;
     --empty: #282725; --l1: #1a4a3b; --l2: #1f7a5c; --l3: #35b389; --l4: #86e2c0;
+    --del: #f09595; --del-bg: #3d1a1a;
 """
 
 _CSS = r"""
@@ -514,6 +573,7 @@ _CSS = r"""
   --muted: #66625b; --faint: #99948b; --accent: #0f6e56; --accent-bg: #e3f4ed;
   --warn: #854f0b; --warn-bg: #faeeda; --code: #f3f1ec; --mark: #fad68a;
   --empty: #ece9e3; --l1: #bfe6d5; --l2: #77cda9; --l3: #2e9e77; --l4: #0f6e56;
+  --del: #a32d2d; --del-bg: #fbe9e9;
   --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC",
     "Noto Sans TC", "Microsoft JhengHei", "Hiragino Sans", sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
@@ -644,11 +704,53 @@ li.kv > strong:first-child { display: block; font-size: 12px; font-weight: 600;
 .hash { display: inline-block; margin: 0 0.1em; padding: 0 0.5em;
   font: 0.8em/1.6 var(--mono); color: var(--accent); background: var(--accent-bg);
   border: 1px solid transparent; border-radius: 999px; white-space: nowrap; }
-button.hash { cursor: copy; }
+button.hash { cursor: pointer; }
 button.hash:hover { border-color: var(--accent); }
 button.hash:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 button.hash.copied { color: var(--panel); background: var(--accent); }
 button.hash.copied::after { content: " \2713"; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 3;
+  width: min(640px, 100vw); overflow: auto; padding: 14px 20px 32px;
+  background: var(--panel); border-left: 1px solid var(--line);
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.14); }
+.drawer[hidden] { display: none; }
+.drawer:focus { outline: none; }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; }
+.drawer .hash { display: inline-flex; align-items: center; gap: 6px; }
+.drawer .hash svg { width: 12px; height: 12px; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.drawer .hash.copied svg { display: none; }
+.drawer .close { width: 32px; height: 32px; padding: 0; font: 20px/1 var(--sans);
+  color: var(--muted); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 8px; cursor: pointer; }
+.drawer .close:hover { color: var(--text); border-color: var(--faint); }
+.drawer .close:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.drawer h2 { margin: 12px 0 2px; font-size: 17px; overflow-wrap: anywhere; }
+.drawer p { margin: 0; font-size: 13px; color: var(--muted); }
+.drawer .stat { margin: 18px 0 6px; }
+.drawer .note { margin: 10px 0 0; }
+.drawer pre { margin: 12px 0 0; padding: 10px 12px; overflow: auto;
+  font: 12px/1.55 var(--mono); background: var(--code); border-radius: 8px; }
+.drawer .msg { white-space: pre-wrap; overflow-wrap: anywhere; }
+.file { border-top: 1px solid var(--line); font-size: 13px; }
+.file > summary, div.file { display: flex; gap: 8px; align-items: baseline;
+  padding: 6px 2px; }
+.file > summary { cursor: pointer; list-style: none; }
+.file > summary::-webkit-details-marker { display: none; }
+.file > summary::before { content: "▸"; color: var(--faint); }
+.file[open] > summary::before { content: "▾"; }
+.file .path { margin-right: auto; font-family: var(--mono); font-size: 12px;
+  overflow-wrap: anywhere; }
+.file .add, .file .del, .file .bin { font: 12px var(--mono); white-space: nowrap; }
+.add { color: var(--accent); }
+.del { color: var(--del); }
+.drawer pre.diff { margin: 0 0 10px; padding: 8px 0; }
+.diff code { display: inline-block; min-width: 100%; }
+.diff span { display: block; padding: 0 12px; white-space: pre; }
+.diff .a { background: var(--accent-bg); }
+.diff .d { background: var(--del-bg); }
+.diff .h { color: var(--muted); }
+.diff .m { color: var(--faint); }
 .manual { border: 1px dashed var(--faint); border-radius: 10px; padding: 4px 16px 8px; }
 .manual h2 { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
 .day-foot { margin: 24px 0 0; font-size: 12px; color: var(--faint); }
@@ -680,7 +782,7 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; }
   #q { width: auto; flex: 1; }
 }
 @media print {
-  .top, .side, .toc, .pager, .results, .foot { display: none !important; }
+  .top, .side, .toc, .pager, .results, .foot, .drawer { display: none !important; }
   .layout { display: block; }
   main { padding: 0; }
   .card, .item { break-inside: avoid; }
@@ -844,10 +946,12 @@ _JS = r"""
       if (a && a.hash === location.hash) { clearSearch(); reveal(true); }
     });
     document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !drawer.hidden) { closeCommit(); return; }
       var tag = e.target && e.target.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") { return; }
       if (e.metaKey || e.ctrlKey || e.altKey) { return; }
       if (e.key === "/") { e.preventDefault(); q.focus(); return; }
+      if (!drawer.hidden) { return; }    // the arrows scroll a diff, not the days
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") { return; }
       var day = currentDay();
       var to = day && day.getAttribute(e.key === "ArrowLeft" ? "data-prev" : "data-next");
@@ -855,11 +959,157 @@ _JS = r"""
     });
     window.addEventListener("hashchange", function () {
       var searching = !!q.value;
+      closeCommit();
       clearSearch();
       reveal(searching);
       markNav();
     });
-    // A commit hash is a button the renderer made; clicking it copies the hash.
+    // A commit hash is a button the renderer made. Clicking it opens the commit
+    // when Git knew the hash as this page was built, and copies it otherwise.
+    var data = { commits: {}, tokens: {} };
+    var drawer = document.getElementById("commit");
+    var diffBase = root.getAttribute("data-diff");
+    var diffs = {};
+    var opener = null;
+    var shown = null;
+    try {
+      var blob = document.getElementById("commits");
+      if (blob) { data = JSON.parse(blob.textContent); }
+    } catch (e) {
+      // Unreadable data: every badge keeps copying.
+    }
+
+    function commitOf(badge) {
+      var sha = data.tokens[badge.getAttribute("data-hash")];
+      return sha ? data.commits[sha] : null;
+    }
+
+    function closeCommit() {
+      if (drawer.hidden) { return; }
+      drawer.hidden = true;
+      shown = null;
+      while (drawer.firstChild) { drawer.removeChild(drawer.firstChild); }
+      if (opener && document.body.contains(opener)) { opener.focus({ preventScroll: true }); }
+      opener = null;
+    }
+
+    function patchInto(pre, text) {
+      var code = document.createElement("code");
+      var hunk = false;
+      text.replace(/\n$/, "").split("\n").forEach(function (l) {
+        var cls = "m";
+        if (l.slice(0, 2) === "@@") { hunk = true; cls = "h"; }
+        else if (hunk) { cls = l[0] === "+" ? "a" : l[0] === "-" ? "d" : ""; }
+        code.appendChild(line("span", cls, l || " "));
+      });
+      pre.appendChild(code);
+    }
+
+    function loadDiff(sha) {
+      if (!diffs[sha]) {
+        diffs[sha] = fetch(diffBase + sha).then(function (r) {
+          if (!r.ok) { throw new Error(r.status); }
+          return r.json();
+        });
+        diffs[sha].catch(function () { delete diffs[sha]; });   // let a reopen retry
+      }
+      return diffs[sha];
+    }
+
+    function fileRow(f, served) {
+      var row = document.createElement(served ? "summary" : "div");
+      row.appendChild(line("span", "path", f.old_path ? f.old_path + " → " + f.path : f.path));
+      if (f.additions === null) {
+        row.appendChild(line("span", "bin", "bin"));
+      } else {
+        row.appendChild(line("span", "add", "+" + f.additions));
+        row.appendChild(line("span", "del", "−" + f.deletions));
+      }
+      if (!served) { row.className = "file"; return row; }
+      var box = document.createElement("details");
+      box.className = "file";
+      box.appendChild(row);
+      return box;
+    }
+
+    function openCommit(c, badge) {
+      closeCommit();
+      opener = badge;
+      shown = c.sha;
+      var head = line("div", "drawer-head", "");
+      var copy = line("button", "hash", c.short);
+      copy.type = "button";
+      copy.setAttribute("data-hash", c.sha);
+      copy.title = "Copy " + c.sha;
+      // Two overlapping sheets: here the hash is copied, not opened.
+      var svg = "http://www.w3.org/2000/svg";
+      var icon = document.createElementNS(svg, "svg");
+      var sheets = document.createElementNS(svg, "path");
+      icon.setAttribute("viewBox", "0 0 24 24");
+      icon.setAttribute("aria-hidden", "true");
+      sheets.setAttribute("d", "M9 9h11v11H9zM5 15H4V4h11v1");
+      icon.appendChild(sheets);
+      copy.appendChild(icon);
+      var close = line("button", "close", "×");
+      close.type = "button";
+      close.setAttribute("aria-label", "Close");
+      head.appendChild(copy);
+      head.appendChild(close);
+      drawer.appendChild(head);
+      var title = line("h2", "", c.subject);
+      title.id = "commit-title";
+      drawer.appendChild(title);
+      drawer.appendChild(line("p", "", c.author + " · " + c.date.slice(0, 16).replace("T", " ")));
+      if (c.body) {
+        drawer.appendChild(line("pre", "msg", c.body + (c.body_truncated ? "\n…" : "")));
+      }
+      drawer.appendChild(line("p", "stat", c.file_count + (c.file_count === 1 ? " file" : " files")
+        + " · +" + c.additions + " −" + c.deletions));
+      var boxes = c.files.map(function (f) {
+        var box = fileRow(f, !!diffBase);
+        drawer.appendChild(box);
+        return box;
+      });
+      if (c.file_count > c.files.length) {
+        drawer.appendChild(line("p", "note", (c.file_count - c.files.length) + " more files are not listed."));
+      }
+      drawer.hidden = false;
+      drawer.scrollTop = 0;
+      drawer.focus();
+      if (!diffBase) {
+        if (c.file_count) {
+          drawer.appendChild(line("p", "note", "Diffs are served live — run git-worklog view --serve."));
+        }
+        return;
+      }
+      loadDiff(c.sha).then(function (res) {
+        if (shown !== c.sha) { return; }
+        if (res.truncated) {
+          drawer.appendChild(line("p", "note", "This diff is too large to show in full. Run git show " + c.short + "."));
+        }
+        if (!res.truncated && res.files.length === boxes.length) {
+          // One patch per listed file, in Git's order. Lines become elements
+          // only when a file is opened: a commit can carry tens of thousands.
+          boxes.forEach(function (box, i) {
+            box.addEventListener("toggle", function () {
+              if (!box.open || box.lastChild.tagName === "PRE") { return; }
+              var pre = line("pre", "diff", "");
+              patchInto(pre, res.files[i]);
+              box.appendChild(pre);
+            });
+          });
+          return;
+        }
+        boxes.forEach(function (box) { box.appendChild(line("p", "note", "Shown in the full patch below.")); });
+        var all = line("pre", "diff", "");
+        patchInto(all, res.files.join(""));
+        drawer.appendChild(all);
+      }, function () {
+        if (shown !== c.sha) { return; }
+        drawer.appendChild(line("p", "note", "The diff could not be loaded. Is git-worklog view --serve still running?"));
+      });
+    }
+
     function copyText(text) {
       if (navigator.clipboard && window.isSecureContext) {
         return navigator.clipboard.writeText(text);
@@ -880,9 +1130,17 @@ _JS = r"""
     }
 
     document.addEventListener("click", function (e) {
-      var badge = e.target.closest ? e.target.closest("button.hash") : null;
-      if (!badge) { return; }
-      e.preventDefault();   // in a work item's title, copy without folding the card
+      if (!e.target.closest) { return; }
+      var inside = e.target.closest("#commit");
+      if (e.target.closest("#commit .close")) { closeCommit(); return; }
+      var badge = e.target.closest("button.hash");
+      if (!badge) {
+        if (!inside) { closeCommit(); }
+        return;
+      }
+      e.preventDefault();   // in a work item's title, act without folding the card
+      var commit = inside ? null : commitOf(badge);
+      if (commit) { openCommit(commit, badge); return; }
       var hash = badge.getAttribute("data-hash");
       copyText(hash).then(function () {
         badge.classList.add("copied");
@@ -929,6 +1187,12 @@ _JS = r"""
     if (system.addEventListener) { system.addEventListener("change", paintToggle); }
     paintToggle();
     markNav();
+    var badges = document.querySelectorAll("button.hash");
+    for (var b = 0; b < badges.length; b++) {
+      if (commitOf(badges[b])) {
+        badges[b].title = "Show commit " + badges[b].getAttribute("data-hash");
+      }
+    }
   });
 })();
 """

@@ -6,6 +6,35 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-10
+
+### Added
+
+- **A commit hash in `view` opens its commit.** Clicking a badge slides a
+  drawer in beside the text with the commit's subject, message, author, date
+  and the files it changed, with lines added and removed. The hash is copied
+  from the badge at the top of the drawer, which carries a copy icon to say
+  so. `view` now asks Git — read-only, and only about
+  the commits the worklog cites — and embeds that in the page, escaped so that
+  a commit message cannot become markup. A merge is shown against its first
+  parent. A hash Git does not know keeps copying itself, as does every badge
+  when the worklog is not at the top of a Git repository; the JSON gains
+  `commit_count`.
+- **`view --serve` shows diffs.** Diffs are not embedded — this repository's 89
+  cited commits come to 2.1 MB of patch — so the static page lists files and
+  the served one lets you open each file's diff, read from Git on demand.
+  `--serve` writes no file: it prints its JSON (`serving: true`, `url`), then
+  serves on `127.0.0.1` at a port the system picks until interrupted. The URL
+  carries a per-run token; requests without it, requests naming any host other
+  than `127.0.0.1`, and requests for commits the worklog does not cite are
+  refused, and Git is run with external diff, textconv and signature checks
+  off. A commit's diff is cut at 2 MB. Not combinable with `--output`.
+
+### Changed
+
+- **Hash badges in `view` show the ordinary pointer.** The copy cursor said
+  "copy" on a badge that now usually opens a commit.
+
 ## [1.4.0] - 2026-10-05
 
 ### Changed
@@ -1069,7 +1098,8 @@ satisfied.
 - A stdlib-only `unittest` suite and GitHub Actions CI on Python 3.9 / 3.12 / 3.13,
   with a `skill.zip` release artifact.
 
-[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/g761007/git-worklog/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/g761007/git-worklog/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/g761007/git-worklog/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/g761007/git-worklog/compare/v1.2.2...v1.3.0
