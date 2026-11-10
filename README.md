@@ -25,7 +25,7 @@ git-worklog/                  # the skill (this whole directory is the skill)
 ├── git_worklog/              # the engine + `git-worklog` CLI (stdlib only)
 │   ├── __init__.py           # __version__ — the single source of the product version
 │   ├── data/
-│   │   └── provider_models.json  # single source of truth for per-host subagent models
+│   │   └── provider_models.json  # shipped defaults for per-host subagent models; seeds ~/.git-worklog/provider_models.json
 │   ├── markers.py            # day/index parser/serialiser; the format's definition
 │   ├── paths.py              # user-level state dir ($GIT_WORKLOG_HOME, ~/.git-worklog)
 │   ├── language.py           # BCP 47 resolution; the run's one output language
@@ -179,6 +179,7 @@ git-worklog analyze    # prepare per-day analysis tasks, and collect them back
 git-worklog preview    # freeze what an apply would write
 git-worklog apply      # write a frozen preview
 git-worklog view       # read the worklog as one web page (read-only)
+git-worklog models     # show or change the subagent model each host uses
 ```
 
 Without installing, the same commands run straight from the skill folder —
@@ -396,11 +397,18 @@ the old file, and refuses if the legacy markers are corrupt.
   treated as the same setting. Paths, code symbols, commit hashes and API names
   are never translated in any language. `index.md` fixes its language on first
   build so it does not churn between contributors. See roadmap §6.2.
-- **Subagent models:** defined once in `git-worklog/git_worklog/data/provider_models.json`
-  (cost-first defaults — Claude Haiku 4.5 / GPT-6 Luna / Gemini 3.8 Flash) and
-  resolved per host by `resolve_provider_model.py`. Override with
-  `GIT_WORKLOG_{ANTHROPIC,OPENAI,GOOGLE}_MODEL` or an explicit `--model`. See
-  `references/provider-models.md`.
+- **Subagent models:** read from **your own file**,
+  `~/.git-worklog/provider_models.json`. The first run copies it from the
+  defaults the skill ships (cost-first — Claude Haiku 4.5 / GPT-6 Luna /
+  Gemini 3.8 Flash) and it is never rewritten after that, so when a provider
+  renames or retires a model you edit the file instead of waiting for a
+  release. `git-worklog models` shows it, and
+  `git-worklog models --host anthropic --model <id> --apply` makes the edit as a
+  command — which is how you ask the coding agent you are in to put its host's
+  current models there. An upgrade that ships newer defaults does not touch
+  your file; `git-worklog doctor` lists where the two differ. For one run,
+  `GIT_WORKLOG_{ANTHROPIC,OPENAI,GOOGLE}_MODEL` or an explicit `--model` still
+  wins. See `references/provider-models.md`.
 - **Preview state:** stored outside the repo in `~/.git-worklog/previews/`.
 - **Subagent results:** each Day Subagent writes its analysis to
   `~/.git-worklog/analysis/<run_id>/<date>.json` rather than returning it as
@@ -418,6 +426,7 @@ your repositories — `~/.git-worklog/`, or wherever `$GIT_WORKLOG_HOME` points:
 | `analysis/<run_id>/results/` | what each Day Subagent concluded |
 | `previews/` | the exact final text of every file a pending apply would write |
 | `view/` | the pages `git-worklog view` writes, rebuilt from the worklog on every run |
+| `provider_models.json` | the subagent model each host uses — yours to edit; copied from the shipped defaults on first use |
 
 **Nothing here is ever deleted automatically.** A preview past its 24h TTL stops
 being applicable but stays on disk, and every run's manifests and results are
@@ -426,10 +435,12 @@ traced back to the analysis behind it. The directory therefore only grows, and
 there is no `prune` command — deciding when a run stops being worth keeping is
 yours, not the tool's.
 
-**Deleting it is safe.** An applied worklog lives in its repository under
-`.git-worklog/` and does not depend on this directory at all. The only thing you
-lose is a preview you have not applied yet: `apply` will answer
-`UNKNOWN_PREVIEW`, and you build a new preview. Delete the whole tree, or just
+**Deleting it is safe, with one thing to keep.** An applied worklog lives in its
+repository under `.git-worklog/` and does not depend on this directory at all.
+You lose a preview you have not applied yet — `apply` will answer
+`UNKNOWN_PREVIEW`, and you build a new preview — and you lose any edits to
+`provider_models.json`, which is then copied afresh from the shipped defaults.
+Keep that one file if you changed it; otherwise delete the whole tree, or just
 the `analysis/<run_id>/` directories you no longer care about.
 
 ### Development commands
@@ -553,8 +564,8 @@ subagent 分析，所有變更都先以 dry-run 預覽，**經你明確確認後
     - `worklog_markers.py`：相容轉接層，實際模組為 `git_worklog.markers`。
   - `git_worklog/`：引擎與 `git-worklog` CLI 本體（僅標準庫）。
     - `__init__.py`：`__version__`——產品版本的單一來源。
-    - `data/provider_models.json`：逐宿主 subagent 模型的**單一設定來源**（放在
-      套件內，安裝版 CLI 才讀得到）。
+    - `data/provider_models.json`：逐宿主 subagent 模型的**內建預設**（放在套件內，
+      安裝版 CLI 才讀得到）；首次使用時複製成 `~/.git-worklog/provider_models.json`。
     - `markers.py`：日期檔／索引的解析與序列化，即格式的定義。
     - `paths.py`：使用者層級狀態目錄（`$GIT_WORKLOG_HOME`、`~/.git-worklog`）。
     - `language.py`：BCP 47 語言解析——一個 run 只有一種輸出語言。
@@ -667,6 +678,7 @@ git-worklog analyze    # 建立每日分析任務，再把結果收回來驗證
 git-worklog preview    # 凍結這次 apply 會寫入的全部內容
 git-worklog apply      # 寫入某份已凍結的 preview
 git-worklog view       # 以單一網頁閱讀工作日誌（唯讀）
+git-worklog models     # 查看或修改各宿主使用的 subagent 模型
 ```
 
 不安裝的話，同樣的指令可直接從 skill 資料夾執行——這裡是 `git-worklog`，或你複製
@@ -853,10 +865,14 @@ skill 會明講並詢問是否先補齊——**絕不默默降級成摘要 commi
   `zh-TW` 與 `zh-CN` 永不視為同一設定。任何語言下，檔案路徑、程式符號、commit hash
   與 API 名稱都不翻譯。`index.md` 於首次建立時固定語言，避免不同貢獻者反覆改寫。
   詳見 roadmap §6.2。
-- **Subagent 模型**：於 `git-worklog/git_worklog/data/provider_models.json` 統一設定
-  （成本優先預設——Claude Haiku 4.5 ／ GPT-6 Luna ／ Gemini 3.8 Flash），由
-  `resolve_provider_model.py` 依宿主解析；可用
-  `GIT_WORKLOG_{ANTHROPIC,OPENAI,GOOGLE}_MODEL` 或 `--model` 覆寫，詳見
+- **Subagent 模型**：讀的是**你自己的檔案** `~/.git-worklog/provider_models.json`。
+  第一次執行時會從 skill 內建的預設（成本優先——Claude Haiku 4.5 ／ GPT-6 Luna ／
+  Gemini 3.8 Flash）複製一份過去，之後就不再改寫它；所以供應商改名或下架模型時，改這個
+  檔案即可，不必等新版。`git-worklog models` 可以查看；
+  `git-worklog models --host anthropic --model <id> --apply` 則是用指令做同一件事——
+  你可以直接請目前所在的 coding agent 用它把該宿主現行的模型寫進去。升級後即使內建預設
+  更新了，也不會動你的檔案；`git-worklog doctor` 會列出兩者的差異。只想影響單次執行時，
+  `GIT_WORKLOG_{ANTHROPIC,OPENAI,GOOGLE}_MODEL` 或 `--model` 仍然優先。詳見
   `references/provider-models.md`。
 - **Preview 狀態**：存放在 repo 之外的 `~/.git-worklog/previews/`。
 - **Subagent 分析結果**：每個 Day Subagent 把分析**寫進**
@@ -874,15 +890,18 @@ skill 會明講並詢問是否先補齊——**絕不默默降級成摘要 commi
 | `analysis/<run_id>/results/` | 每個 Day Subagent 的分析結果 |
 | `previews/` | 待套用的 apply 會寫入的每個檔案的完整最終內容 |
 | `view/` | `git-worklog view` 寫出的頁面，每次執行都從工作日誌重新產生 |
+| `provider_models.json` | 各宿主使用的 subagent 模型——這是你的檔案，可自行修改；首次使用時從內建預設複製 |
 
 **這裡的東西永遠不會被自動刪除。** 超過 24 小時 TTL 的 preview 只是不再能套用，檔案仍
 留在磁碟上；每次執行的 manifest 與結果也是刻意保留的——幾個月後看到一段讀起來奇怪的
 日誌，還能回溯它是根據什麼分析寫出來的。因此這個目錄只增不減，而且**沒有** `prune`
 指令：一次執行何時不再值得保留，是你的判斷，不是工具的。
 
-**刪掉它是安全的。** 已經套用的日誌存在各自 repo 的 `.git-worklog/` 底下，完全不依賴
-這個目錄。唯一會失去的是還沒套用的 preview——`apply` 會回報 `UNKNOWN_PREVIEW`，重新
-建一份 preview 即可。整棵刪掉，或只刪掉你不再在意的 `analysis/<run_id>/` 都可以。
+**刪掉它是安全的，只有一個檔案要留意。** 已經套用的日誌存在各自 repo 的
+`.git-worklog/` 底下，完全不依賴這個目錄。會失去的是還沒套用的 preview——`apply` 會回報
+`UNKNOWN_PREVIEW`，重新建一份 preview 即可——以及你對 `provider_models.json` 的修改：
+刪掉之後它會從內建預設重新複製一份。改過的話請留下這個檔案；否則整棵刪掉，或只刪掉你
+不再在意的 `analysis/<run_id>/` 都可以。
 
 ### 安全模型
 

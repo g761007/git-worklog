@@ -6,6 +6,42 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **The subagent models are yours to edit.** A run now reads
+  `~/.git-worklog/provider_models.json` instead of the table inside the skill.
+  The first time a model is resolved the shipped defaults are copied there, and
+  the file is never rewritten after that — not by a run, not by an upgrade — so
+  when a provider renames or retires a model you change the file rather than
+  wait for a release. `--model` and `GIT_WORKLOG_<PROVIDER>_MODEL` still take
+  precedence. A file that cannot be read stops the run and is named
+  (`CONFIG_ERROR`); it is never a reason to fall back to the shipped defaults.
+- **The first run asks whether to update the models.** Creating the file is
+  reported once as `USER_MODELS_CREATED`: shipped defaults are as old as the
+  release they came in, so the skill stops and asks whether to replace them with
+  the models your host offers now.
+- **`git-worklog models`** shows that file and where it differs from the shipped
+  defaults, and `git-worklog models --host <host> --model <id> [--escalation-model
+  <id>] --apply` changes one host in it (dry-run without `--apply`), leaving
+  every other key as found. It is the edit as a command, so you can ask the
+  coding agent you are in to look up its host's current models and put them
+  there. SKILL.md tells the agent to take ids only from what the host offers,
+  keep the default on the cost-first tier, and apply only after you have seen
+  the dry-run.
+- **`doctor` checks the model file** (`provider_models`): `ok` when it is absent
+  or equals the shipped defaults, `warn` with each differing field when it does
+  not, `fail` when it cannot be read.
+
+### Changed
+
+- **An upgrade no longer changes which model runs** once the file exists. New
+  shipped defaults reach a machine only when its file is absent; otherwise
+  `doctor` reports the difference and the choice is yours.
+- `resolve_provider_model.py` reports `config_path`, the table it read, and its
+  `--config` now defaults to the user's file rather than the shipped one.
+- The test suite runs with a throwaway `HOME`, so it neither writes
+  to nor is steered by the developer's own `~/.git-worklog/`.
+
 ## [1.5.0] - 2026-11-10
 
 ### Added

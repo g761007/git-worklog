@@ -1,9 +1,25 @@
 # Provider Models
 
-Per-host subagent model selection for the `git-worklog` skill. The **single
-source of truth** is `git_worklog/data/provider_models.json`; this document is
-its human-facing mirror. Never add a second place that stores model ids — update the
-JSON and this file only.
+Per-host subagent model selection for the `git-worklog` skill.
+
+**Two files, two owners.**
+
+- `git_worklog/data/provider_models.json` is what the skill **ships**: the
+  defaults, and the single place this repository stores model ids. This document
+  is its human-facing mirror. Never add a third place — update that JSON and this
+  file only.
+- `~/.git-worklog/provider_models.json` is what a run **reads**, and it belongs to
+  the user. The first time a model is resolved it is copied from the shipped
+  file; after that the tool never rewrites it — not on a run, not on an upgrade.
+  Models are renamed and retired faster than a tool should have to be released,
+  so a new model id is an edit to this file. (`$GIT_WORKLOG_HOME` moves it along
+  with the rest of the state directory.)
+
+The tables below are the shipped defaults. What a given machine actually uses is
+whatever its own file says: `git-worklog models` prints it, and
+`git-worklog doctor` lists where it differs from the defaults of the installed
+version — the same list whether the user edited on purpose or an upgrade moved
+the defaults on.
 
 The skill runs under one of three hosts. Each host has one provider key and one
 model. Every Day Subagent and Code Analysis Subagent for a run is spawned on the
@@ -39,7 +55,8 @@ running under, and `analyze prepare` does the rest:
 
 ```text
 analyze prepare <range> --host <anthropic|openai|google>
-  -> reads git_worklog/data/provider_models.json
+  -> reads ~/.git-worklog/provider_models.json (copying the shipped defaults
+     there first if it does not exist)
   -> applies the override precedence below
   -> reports { provider, model:{display_name, model_id[, reasoning_effort]} }
   -> stamps both on every day's manifest
@@ -69,9 +86,37 @@ For a given host, the model id is chosen in this order (highest first):
 
 1. an explicit runtime id passed to the command (`--model`),
 2. the environment variable for that provider,
-3. the provider default in `git_worklog/data/provider_models.json`.
+3. the provider default in the user's `~/.git-worklog/provider_models.json`.
 
-The skill never auto-substitutes an arbitrary host default beyond step 3.
+The skill never auto-substitutes an arbitrary host default beyond step 3. A user
+file that cannot be read, or that leaves the host out, is an error
+(`CONFIG_ERROR` / `UNKNOWN_HOST`) naming the file — never a reason to fall back
+to the shipped defaults, which would swap the model the user chose for one they
+did not. Only when the file cannot be *created* (a read-only home) are the
+shipped defaults used, with a `USER_MODELS_NOT_WRITTEN` warning.
+
+## Changing the models: `git-worklog models`
+
+Editing the user's file by hand is fine. The command is the same edit, for when
+a coding agent makes it:
+
+```text
+git-worklog models                                    # show the file, and its differences from the shipped defaults
+git-worklog models --host <host> --model <id>         # dry-run: before / after, nothing written
+git-worklog models --host <host> --model <id> --apply # write it
+```
+
+Fields: `--model`, `--display-name` (defaults to the model id when the model
+changes), `--reasoning-effort`, `--escalation-model`,
+`--escalation-reasoning-effort`. Only the named host and the named fields
+change; every other key in the file is kept as found. The command does not check
+that an id exists — only the host can, at dispatch, and a rejected id still
+halts and asks.
+
+The first time the file is created, the run reports `USER_MODELS_CREATED`, and
+the skill asks the user whether to update the shipped defaults to the host's
+current models. How the agent does that is in SKILL.md §3; it needs nothing from
+this document.
 
 | provider    | environment variable            |
 | ----------- | ------------------------------- |
