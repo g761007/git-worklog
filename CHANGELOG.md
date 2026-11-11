@@ -6,6 +6,36 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-11-11
+
+No change to the tool: no command, flag, JSON field or skill behaviour differs
+from 1.6.0. This release brings the published information up to date.
+
+### Added
+
+- **The CLI is on PyPI.** `uv tool install git-worklog`, `pipx install
+  git-worklog`, or `uvx git-worklog view` to run it once without installing.
+  Releases are published there automatically from now on.
+- **The repository installs as a Claude Code plugin** —
+  `/plugin marketplace add g761007/git-worklog`, then
+  `/plugin install git-worklog@git-worklog`. A plugin's skills are namespaced,
+  so the command is `/git-worklog:git-worklog`; copying the folder still gives
+  the bare `/git-worklog`.
+- **A live demo** of `git-worklog view`, rendered from this repository's own
+  worklog: <https://g761007.github.io/git-worklog/>.
+- `CONTRIBUTING.md`, `SECURITY.md` and issue templates.
+
+### Changed
+
+- **The README is a front page.** It leads with what the tool is for, a quick
+  start, a real day entry and two recorded demos; the reference it used to carry
+  moved, unchanged, to `docs/` (usage, CLI, configuration, safety model,
+  development), with `README.zh-TW.md` and `docs/zh-TW/` beside them.
+- **Codex and Gemini are listed as experimental.** Only Claude Code is exercised
+  end to end; the README now gives the skills folder and the invocation each of
+  the other hosts documents, and says a full run there is not verified.
+- Python 3.14 is declared and tested in CI.
+
 ## [1.6.0] - 2026-11-10
 
 ### Added
@@ -1136,7 +1166,8 @@ satisfied.
 - A stdlib-only `unittest` suite and GitHub Actions CI on Python 3.9 / 3.12 / 3.13,
   with a `skill.zip` release artifact.
 
-[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/g761007/git-worklog/compare/v1.6.1...HEAD
+[1.6.1]: https://github.com/g761007/git-worklog/compare/v1.6.0...v1.6.1
 [1.6.0]: https://github.com/g761007/git-worklog/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/g761007/git-worklog/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/g761007/git-worklog/compare/v1.3.1...v1.4.0

@@ -49,7 +49,10 @@ PATH.
 #
 # 1.6.0 is a minor bump by the plain rule again: a new command (`models`), and
 # the model table a run reads moved from the package to the user's own file.
-__version__ = "1.6.0"
+#
+# 1.6.1 is a patch: nothing in the tool changed. It exists so that what PyPI
+# shows -- the README, its images, the install lines -- matches the repository.
+__version__ = "1.6.1"
 
 # On-disk layout version of `.git-worklog/`, re-exported for convenience. It
 # describes the *data*, not the tool, and bumps only when a migration is needed.
