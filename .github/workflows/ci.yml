@@ -16,7 +16,7 @@ jobs:
       matrix:
         # 3.9 is the documented floor (zoneinfo, since-as-filter needs git 2.37+
         # which ubuntu-latest provides); newer versions guard against regressions.
-        python-version: ["3.9", "3.12", "3.13"]
+        python-version: ["3.9", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v4
 

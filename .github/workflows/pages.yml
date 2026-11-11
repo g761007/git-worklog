@@ -1,0 +1,57 @@
+name: Demo page
+
+# Publishes this repository's own worklog, rendered by `git-worklog view`, to
+# GitHub Pages. The page is what the README's "live demo" link opens, so it is
+# rebuilt whenever the worklog or the viewer changes.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".git-worklog/**"
+      - "git-worklog/git_worklog/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # Full history: the page asks Git about every commit the worklog cites,
+      # and a shallow clone knows only the last one.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Render the worklog
+        env:
+          PYTHONPATH: git-worklog
+        run: |
+          mkdir _site
+          python -m git_worklog view --no-open --dir .git-worklog --output _site/index.html
+          # `view` writes the page owner-only; Pages needs it world-readable.
+          chmod 644 _site/index.html
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v5
