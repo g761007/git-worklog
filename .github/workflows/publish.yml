@@ -1,13 +1,13 @@
 name: Publish to PyPI
 
-# Run by hand from the Actions tab, on the tag to publish. It uses PyPI trusted
-# publishing, so there is no token to store — but PyPI has to be told once that
-# this workflow may publish the `git-worklog` project:
-#   https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/
-#   (owner g761007, repository git-worklog, workflow publish.yml, environment pypi)
-# Once a first publish has worked, add `release: {types: [published]}` to `on:`
-# to publish every release automatically.
+# Publishes every GitHub release, built from the release's tag. It can also be
+# run by hand from the Actions tab, on the tag to publish. It uses PyPI trusted
+# publishing, so there is no token to store: PyPI trusts this workflow for the
+# `git-worklog` project (owner g761007, repository git-worklog, workflow
+# publish.yml, environment pypi).
 on:
+  release:
+    types: [published]
   workflow_dispatch:
 
 jobs:

@@ -15,14 +15,26 @@ Install the git-worklog CLI for me: find the latest release tag at https://githu
 It always picks the newest release, so the same line also upgrades an existing
 install.
 
-To do it by hand: the package is defined by the repository's root
-`pyproject.toml`, not by anything inside the skill folder, so install it from
-the repository: a copy of the skill, or `skill.zip`, has nothing to install. With
+To do it by hand: the package is on
+[PyPI](https://pypi.org/project/git-worklog/). With
 [uv](https://docs.astral.sh/uv/), which gives the command an environment of its
 own and puts it on your PATH:
 
 ```bash
-uv tool install "git+https://github.com/g761007/git-worklog@v1.6.0"
+uv tool install git-worklog      # pipx install git-worklog works too
+uv tool upgrade git-worklog      # later, to move to the newest release
+uvx git-worklog view             # or run it once without installing anything
+```
+
+To install from the repository instead — a tag PyPI does not have, or `main` —
+note that the package is defined by the repository's root `pyproject.toml`, not
+by anything inside the skill folder: a copy of the skill, or `skill.zip`, has
+nothing to install. With
+[uv](https://docs.astral.sh/uv/), which gives the command an environment of its
+own and puts it on your PATH:
+
+```bash
+uv tool install "git+https://github.com/g761007/git-worklog@v1.6.1"
 ```
 
 Put the release you want in the tag (see

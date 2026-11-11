@@ -18,7 +18,7 @@ it: weekly summaries, release changelogs, handoffs, outstanding tech debt.
 
 **[Live demo](https://g761007.github.io/git-worklog/)** — this repository's own worklog, rendered by `git-worklog view`
 
-![The worklog viewer: the overview, one day's work items, a commit opened from its hash, and search](docs/images/view-demo.gif)
+![The worklog viewer: the overview, one day's work items, a commit opened from its hash, and search](https://raw.githubusercontent.com/g761007/git-worklog/main/docs/images/view-demo.gif)
 
 </div>
 
@@ -89,7 +89,7 @@ exactly what would be written. Only after you confirm do the files land:
     └── ...
 ```
 
-![A real session: /git-worklog, the menu, option 1, the dry-run preview, then apply](docs/images/skill-demo.gif)
+![A real session: /git-worklog, the menu, option 1, the dry-run preview, then apply](https://raw.githubusercontent.com/g761007/git-worklog/main/docs/images/skill-demo.gif)
 
 *A real Claude Code session on a three-commit sample repository whose commit
 messages are `fix`, `wip` and `address review`. Waiting time is shortened.*
@@ -168,9 +168,9 @@ collapsible work-item cards, search across all of it, and light and dark themes.
 Click a commit hash and a drawer opens with its message, files and — under
 `--serve` — each file's diff.
 
-![One day: its summary, a table of contents, and every work item as a card](docs/images/view-day.png)
+![One day: its summary, a table of contents, and every work item as a card](https://raw.githubusercontent.com/g761007/git-worklog/main/docs/images/view-day.png)
 
-![A commit opened from its hash: message, files changed, and one file's diff](docs/images/view-commit.png)
+![A commit opened from its hash: message, files changed, and one file's diff](https://raw.githubusercontent.com/g761007/git-worklog/main/docs/images/view-commit.png)
 
 The viewer is part of the optional CLI — see [CLI reference](docs/cli.md).
 
@@ -238,7 +238,8 @@ does not need it; install it when you want the viewer, validation or the
 pipeline on its own:
 
 ```bash
-uv tool install "git+https://github.com/g761007/git-worklog@v1.6.0"
+uv tool install git-worklog      # from PyPI; pipx install git-worklog works too
+uvx git-worklog view             # or run it once without installing
 
 git-worklog view       # read the worklog as one web page
 git-worklog doctor     # is this environment able to run the tool?

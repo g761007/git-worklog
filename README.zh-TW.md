@@ -213,7 +213,8 @@ message 分別是 `fix`、`wip`、`address review`。等待時間經過縮短。
 驗證，或單獨驅動流程時再安裝：
 
 ```bash
-uv tool install "git+https://github.com/g761007/git-worklog@v1.6.0"
+uv tool install git-worklog      # 從 PyPI 安裝；也可以用 pipx install git-worklog
+uvx git-worklog view             # 或不安裝、直接執行一次
 
 git-worklog view       # 以單一網頁閱讀工作日誌
 git-worklog doctor     # 這個環境跑得動嗎？

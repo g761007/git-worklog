@@ -13,12 +13,23 @@
 
 它一律安裝最新的 release，所以同一行也能用來升級既有的安裝。
 
-要自己動手的話：這個套件是由 repo 根目錄的 `pyproject.toml` 定義的，不在 skill
-資料夾裡，所以要從 repo 安裝：skill 的複本或 `skill.zip` 裡沒有可以安裝的東西。建議用
+要自己動手的話：這個套件已上架
+[PyPI](https://pypi.org/project/git-worklog/)。建議用
 [uv](https://docs.astral.sh/uv/)，它會替這個指令建立獨立的環境，並放進你的 PATH：
 
 ```bash
-uv tool install "git+https://github.com/g761007/git-worklog@v1.6.0"
+uv tool install git-worklog      # 也可以用 pipx install git-worklog
+uv tool upgrade git-worklog      # 之後要升級到最新的 release 時
+uvx git-worklog view             # 或完全不安裝、直接執行一次
+```
+
+若要改從 repo 安裝——PyPI 上沒有的 tag，或 `main`——請注意這個套件是由 repo 根目錄的
+`pyproject.toml` 定義的，不在 skill 資料夾裡：skill 的複本或 `skill.zip` 裡沒有可以
+安裝的東西。同樣用
+[uv](https://docs.astral.sh/uv/)，它會替這個指令建立獨立的環境，並放進你的 PATH：
+
+```bash
+uv tool install "git+https://github.com/g761007/git-worklog@v1.6.1"
 ```
 
 tag 填你要的版本（見 [Releases](https://github.com/g761007/git-worklog/releases)）；
