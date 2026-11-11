@@ -1,0 +1,9 @@
+{
+  "name": "git-worklog",
+  "description": "Per-day project worklog from real Git diffs, and reports built from it.",
+  "author": { "name": "Daniel Hsieh", "url": "https://github.com/g761007" },
+  "homepage": "https://github.com/g761007/git-worklog",
+  "repository": "https://github.com/g761007/git-worklog",
+  "license": "MIT",
+  "skills": ["./git-worklog"]
+}

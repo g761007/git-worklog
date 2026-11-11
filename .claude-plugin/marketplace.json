@@ -1,0 +1,12 @@
+{
+  "name": "git-worklog",
+  "description": "Git Worklog: a per-day project worklog written from real Git diffs, and reports built from it.",
+  "owner": { "name": "Daniel Hsieh", "url": "https://github.com/g761007" },
+  "plugins": [
+    {
+      "name": "git-worklog",
+      "source": "./",
+      "description": "Per-day project worklog from real Git diffs, and reports built from it."
+    }
+  ]
+}
