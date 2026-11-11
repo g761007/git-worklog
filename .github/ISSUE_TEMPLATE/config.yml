@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or idea
+    url: https://github.com/g761007/git-worklog/discussions
+    about: Ask how to do something, or talk an idea through before it becomes an issue.
+  - name: Security vulnerability
+    url: https://github.com/g761007/git-worklog/security
+    about: Report it privately through the Security tab, not in a public issue.

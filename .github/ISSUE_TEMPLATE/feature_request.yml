@@ -1,0 +1,20 @@
+name: Feature request
+description: Something the tool should do and does not
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you were trying to get done, and where the tool stopped helping.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: The behaviour you have in mind. A sketch of the command or the output is welcome.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do today instead

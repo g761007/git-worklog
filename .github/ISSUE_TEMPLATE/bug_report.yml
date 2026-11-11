@@ -1,0 +1,48 @@
+name: Bug report
+description: Something does not work the way the documentation says it does
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you ran or asked for, what you got, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The invocation (`/git-worklog ...`) or the CLI command, and anything about the repository that matters (shallow clone, submodules, merge-heavy history).
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: The JSON or error the command printed. Remove anything private first — previews and analysis results quote source code.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `git-worklog version` (or `python3 -m git_worklog version` from the skill folder).
+    validations:
+      required: true
+  - type: dropdown
+    id: host
+    attributes:
+      label: Agent host
+      options:
+        - Claude Code
+        - Codex
+        - Gemini
+        - CLI only (no agent)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, Python version and Git version. `git-worklog --text doctor` prints all three.
