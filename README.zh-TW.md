@@ -16,7 +16,9 @@
 
 [English](README.md) · **繁體中文**
 
-![工作日誌檢視頁：統計、活動日曆，以及每一天摘要的時間軸](docs/images/view-overview.png)
+**[線上 demo](https://g761007.github.io/git-worklog/)**——這個 repository 自己的工作日誌，由 `git-worklog view` 渲染
+
+![工作日誌檢視頁：總覽、單日的工作項目、從 hash 打開的 commit，以及搜尋](docs/images/view-demo.gif)
 
 </div>
 
@@ -46,6 +48,16 @@ agent：
 把 `git-worklog/` 資料夾複製到 `~/.claude/skills/` 即可。不需要安裝任何東西，也不需要
 編譯——引擎就在那個資料夾裡，只用 Python 標準庫執行。
 
+在 Claude Code 上也可以改用 plugin 的方式安裝：
+
+```text
+/plugin marketplace add g761007/git-worklog
+/plugin install git-worklog@git-worklog
+```
+
+plugin 提供的 skill 會帶命名空間，所以指令會變成 `/git-worklog:git-worklog`，而不是
+`/git-worklog`。
+
 **2. 在任何 Git repository 裡執行：**
 
 ```text
@@ -70,6 +82,11 @@ agent：
     ├── 2026-07-15.md # 一天一個檔
     └── ...
 ```
+
+![實際的工作階段：/git-worklog、選單、選項 1、dry-run 預覽，然後 apply](docs/images/skill-demo.gif)
+
+*在一個只有三個 commit 的範例 repository 上實際執行的 Claude Code 工作階段，commit
+message 分別是 `fix`、`wip`、`address review`。等待時間經過縮短。*
 
 `/git-worklog` 要你自己打——skill 不會因為你隨口提了一句就自行啟動。
 
@@ -174,8 +191,21 @@ agent：
 
 - **Python 3.9+**——僅標準庫，無第三方套件。
 - **Git 2.37+**。
-- 支援 agent skill 的宿主：Claude Code；透過 `agents/openai.yaml` 也適用
-  Codex／Gemini。
+- 能載入 skill 的 agent 宿主——見下表。
+
+### Agent 宿主
+
+| 宿主 | Skills 目錄 | 啟動方式 | 狀態 |
+|---|---|---|---|
+| Claude Code | `~/.claude/skills/` | `/git-worklog` | 在此開發與測試 |
+| Codex | `~/.agents/skills/` | `$git-worklog`，或從 `/skills` 選取 | 實驗性 |
+| Gemini CLI | `~/.gemini/skills/` | 直接要求整理工作日誌，由模型啟用 skill | 實驗性 |
+
+這個 skill 就是單純的 `SKILL.md` 加上 Python，所以任何支援 Agent Skills 格式的宿主都能
+載入。每次發版只有 Claude Code 會完整跑過一遍；其他宿主的目錄與啟動方式取自各自的官方
+文件，完整流程尚未驗證。歡迎到
+[Discussions](https://github.com/g761007/git-worklog/discussions) 回報實際可用與不可用的
+情況。
 
 ## CLI（選用）
 
@@ -233,7 +263,11 @@ Gemini 3.8 Flash）。這份模型表是你自己的檔案，可以修改——�
 
 ## 參與貢獻
 
-歡迎提 issue 與 pull request。測試只用標準庫的 `unittest`，不需安裝任何東西：
+歡迎提 issue 與 pull request——基本規則見 [CONTRIBUTING.md](CONTRIBUTING.md)。提問與
+想法請到 [Discussions](https://github.com/g761007/git-worklog/discussions)；安全性問題請依
+[SECURITY.md](SECURITY.md) 回報。
+
+測試只用標準庫的 `unittest`，不需安裝任何東西：
 
 ```bash
 python3 -m unittest discover -s tests -v

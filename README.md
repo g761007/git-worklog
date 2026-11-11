@@ -16,7 +16,9 @@ it: weekly summaries, release changelogs, handoffs, outstanding tech debt.
 
 **English** · [繁體中文](README.zh-TW.md)
 
-![The worklog viewer: counts, an activity calendar and a timeline of every day's summary](docs/images/view-overview.png)
+**[Live demo](https://g761007.github.io/git-worklog/)** — this repository's own worklog, rendered by `git-worklog view`
+
+![The worklog viewer: the overview, one day's work items, a commit opened from its hash, and search](docs/images/view-demo.gif)
 
 </div>
 
@@ -52,6 +54,16 @@ and copy the `git-worklog/` folder into `~/.claude/skills/`. Nothing is installe
 and nothing is compiled — the engine sits in that folder and runs on the Python
 standard library alone.
 
+On Claude Code you can install it as a plugin instead:
+
+```text
+/plugin marketplace add g761007/git-worklog
+/plugin install git-worklog@git-worklog
+```
+
+A plugin's skills are namespaced, so the command is then
+`/git-worklog:git-worklog` rather than `/git-worklog`.
+
 **2. Run it** inside any Git repository:
 
 ```text
@@ -76,6 +88,11 @@ exactly what would be written. Only after you confirm do the files land:
     ├── 2026-07-15.md # exactly one day per file
     └── ...
 ```
+
+![A real session: /git-worklog, the menu, option 1, the dry-run preview, then apply](docs/images/skill-demo.gif)
+
+*A real Claude Code session on a three-commit sample repository whose commit
+messages are `fix`, `wip` and `address review`. Waiting time is shortened.*
 
 You type `/git-worklog` yourself — the skill never starts on its own because of
 something you said in passing.
@@ -197,8 +214,22 @@ The full list is in the [safety model](docs/safety-model.md).
 
 - **Python 3.9+** — standard library only, no third-party packages.
 - **Git 2.37+**.
-- A host that supports agent skills: Claude Code, and — via
-  `agents/openai.yaml` — Codex / Gemini.
+- An agent host that loads skills — see below.
+
+### Agent hosts
+
+| Host | Skills folder | How you start it | Status |
+|---|---|---|---|
+| Claude Code | `~/.claude/skills/` | `/git-worklog` | Developed and tested here |
+| Codex | `~/.agents/skills/` | `$git-worklog`, or pick it from `/skills` | Experimental |
+| Gemini CLI | `~/.gemini/skills/` | Ask for a worklog; the model activates the skill | Experimental |
+
+The skill is plain `SKILL.md` plus Python, so it loads anywhere the Agent Skills
+format does. Only Claude Code is exercised end to end on every release; on the
+other hosts the folder and the invocation above come from each host's
+documentation, and a full run has not been verified. Reports of what works and
+what does not are welcome in
+[Discussions](https://github.com/g761007/git-worklog/discussions).
 
 ## The CLI (optional)
 
@@ -259,8 +290,12 @@ deletes the original.
 
 ## Contributing
 
-Issues and pull requests are welcome. The test suite is standard-library
-`unittest` and needs nothing installed:
+Issues and pull requests are welcome — [CONTRIBUTING.md](CONTRIBUTING.md) has
+the ground rules. Questions and ideas go to
+[Discussions](https://github.com/g761007/git-worklog/discussions); security
+reports go through [SECURITY.md](SECURITY.md).
+
+The test suite is standard-library `unittest` and needs nothing installed:
 
 ```bash
 python3 -m unittest discover -s tests -v
